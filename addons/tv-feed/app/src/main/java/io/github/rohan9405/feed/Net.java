@@ -29,6 +29,35 @@ final class Net {
         }
     }
 
+    /** A GET whose error answers matter too: the status and the body, whatever the status. */
+    static final class Response {
+        final int code;
+        final String body;
+
+        Response(int code, String body) {
+            this.code = code;
+            this.body = body;
+        }
+    }
+
+    static Response request(String url, String header, String value, int maxBytes) throws IOException {
+        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+        c.setConnectTimeout(TIMEOUT_MS);
+        c.setReadTimeout(TIMEOUT_MS);
+        c.setRequestProperty("User-Agent", "CleanYourTV-Feed/1.0");
+        if (header != null) c.setRequestProperty(header, value);
+        try {
+            int code = c.getResponseCode();
+            InputStream in = code / 100 == 2 ? c.getInputStream() : c.getErrorStream();
+            if (in == null) return new Response(code, "");
+            try (InputStream s = in) {
+                return new Response(code, new String(read(s, maxBytes), java.nio.charset.StandardCharsets.UTF_8));
+            }
+        } finally {
+            c.disconnect();
+        }
+    }
+
     static byte[] read(InputStream in, int maxBytes) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         byte[] buf = new byte[16 * 1024];
