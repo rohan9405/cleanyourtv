@@ -47,7 +47,11 @@ final class Demo {
     private static final String PLOT = "A sample title for previewing Home: the real header shows what is new on your "
             + "services in the last 10 days, with its IMDb rating.";
 
+    /** Sample app -> the app its tiles go to: itself when installed, else one of the TV's own (an emulator has few). */
+    private static final Map<String, String> STAND_IN = new LinkedHashMap<>();
+
     static Store.Snapshot snapshot(Context ctx) {
+        standIns(ctx);
         List<Item> items = new ArrayList<>();
         hero(ctx, items, "Minimum Wage", "tv", "2026", "8.4", NETFLIX, 0xFFB71C1C);
         hero(ctx, items, "Gajab Raat", "movie", "2026", "7.9", NETFLIX, 0xFF4A148C);
@@ -90,8 +94,26 @@ final class Demo {
         }
     }
 
+    private static void standIns(Context ctx) {
+        STAND_IN.clear();
+        android.content.pm.PackageManager pm = ctx.getPackageManager();
+        List<String> installed = new ArrayList<>();
+        for (android.content.pm.ResolveInfo r : pm.queryIntentActivities(new android.content.Intent(android.content.Intent.ACTION_MAIN)
+                .addCategory(android.content.Intent.CATEGORY_LEANBACK_LAUNCHER), 0)) {
+            String p = r.activityInfo.packageName;
+            if (!p.equals("com.gathin.tvhome") && !installed.contains(p)) installed.add(p);
+        }
+        int next = 0;
+        for (String p : new String[] {NETFLIX, YOUTUBE, PRIME, HOTSTAR, SONYLIV, ZEE5, APPLE}) {
+            if (installed.contains(p) || installed.isEmpty()) STAND_IN.put(p, p);
+            else STAND_IN.put(p, installed.get(next++ % installed.size()));
+        }
+    }
+
     private static Item add(Context ctx, List<Item> items, String section, String row, int order, String title,
                             String subtitle, String rating, int progress, String pkg, int colour) {
+        String stand = STAND_IN.get(pkg);
+        if (stand != null) pkg = stand;
         Item i = new Item();
         i.section = section;
         i.tab = pkg;

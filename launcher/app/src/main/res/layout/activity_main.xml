@@ -367,6 +367,14 @@
                     android:drawableStart="@drawable/ic_wifi"
                     android:nextFocusDown="@+id/grid" />
 
+                <!-- feed_package (FeedHome): opens the Bluetooth settings, for headphones, speakers and remotes. -->
+                <TextView
+                    android:id="@+id/btnBluetooth"
+                    style="@style/TopButtonIcon"
+                    android:visibility="gone"
+                    android:contentDescription="@string/bluetooth"
+                    android:drawableStart="@drawable/ic_bluetooth" />
+
                 <TextView
                     android:id="@+id/btnVpn"
                     style="@style/TopButton"
