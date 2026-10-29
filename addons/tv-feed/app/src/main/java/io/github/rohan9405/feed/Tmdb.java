@@ -25,14 +25,19 @@ import java.util.List;
 final class Tmdb {
     static final String PREFS = "tmdb";
     static final String KEY = "token";
-    static final int NEW_DAYS = 10;
+    static final int NEW_DAYS = 14;
     private static final long CACHE_MS = 6L * 60 * 60 * 1000;
     private static final String[] HOSTS = {"api.tmdb.org", "api.themoviedb.org"};
     static final String IMAGES = "https://image.tmdb.org/t/p/";
 
     /** One film or series. */
     static final class Title {
+        long id;
         String kind = "";        // "movie" or "tv"
+        /** "Drama, Thriller" from TMDB's genre ids. */
+        String genres = "";
+        /** "Season 3" when the title counts as new because a season of it premiered in the window. */
+        String season = "";
         String name = "";
         String year = "";
         String overview = "";
@@ -73,11 +78,63 @@ final class Tmdb {
         return dedupe(out);
     }
 
-    /** Series with an episode out in the last {@value #NEW_DAYS} days: new seasons, when a service has few premieres. */
-    List<Title> airing(int provider, LocalDate today) {
+    /**
+     * Series whose new season premiered in the last {@value #NEW_DAYS} days. A series with only a new episode of an old
+     * season (a long-running show airing weekly) is not new and stays out: each candidate's seasons are checked.
+     */
+    List<Title> newSeasons(int provider, LocalDate today) {
+        LocalDate from = today.minusDays(NEW_DAYS);
+        List<Title> airing = new ArrayList<>();
+        add(airing, discover("tv", provider, "air_date.gte", from.toString(), "air_date.lte", today.toString()), "tv");
         List<Title> out = new ArrayList<>();
-        add(out, discover("tv", provider, "air_date.gte", today.minusDays(NEW_DAYS).toString(), "air_date.lte", today.toString()), "tv");
+        for (int i = 0; i < Math.min(20, airing.size()); i++) {
+            Title t = airing.get(i);
+            JSONObject show = get("/3/tv/" + t.id);
+            JSONArray seasons = show == null ? null : show.optJSONArray("seasons");
+            for (int k = 0; seasons != null && k < seasons.length(); k++) {
+                JSONObject season = seasons.optJSONObject(k);
+                if (season == null || season.optInt("season_number") < 1) continue;
+                LocalDate premiere = date(season.optString("air_date"));
+                if (premiere != null && !premiere.isBefore(from) && !premiere.isAfter(today)) {
+                    t.season = "Season " + season.optInt("season_number");
+                    out.add(t);
+                    break;
+                }
+            }
+        }
         return out;
+    }
+
+    private static LocalDate date(String s) {
+        try {
+            return s == null || s.isEmpty() ? null : LocalDate.parse(s);
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /** TMDB genre id -> name, movies and series together; empty when TMDB cannot be reached. */
+    private java.util.Map<Integer, String> genreNames;
+
+    private String genres(JSONArray ids) {
+        if (ids == null || ids.length() == 0) return "";
+        if (genreNames == null) {
+            genreNames = new java.util.HashMap<>();
+            for (String kind : new String[] {"movie", "tv"}) {
+                JSONObject list = get("/3/genre/" + kind + "/list");
+                JSONArray g = list == null ? null : list.optJSONArray("genres");
+                for (int i = 0; g != null && i < g.length(); i++) {
+                    JSONObject o = g.optJSONObject(i);
+                    if (o != null) genreNames.put(o.optInt("id"), o.optString("name"));
+                }
+            }
+        }
+        List<String> names = new ArrayList<>();
+        for (int i = 0; i < ids.length() && names.size() < 3; i++) {
+            String n = genreNames.get(ids.optInt(i));
+            if (n != null && !n.isEmpty() && !names.contains(n)) names.add(n);
+        }
+        return android.text.TextUtils.join(", ", names);
     }
 
     /** The most popular series and films on a service, mixed. */
@@ -104,13 +161,15 @@ final class Tmdb {
         return get(b.build().toString());
     }
 
-    private static void add(List<Title> out, JSONObject page, String kind) {
+    private void add(List<Title> out, JSONObject page, String kind) {
         JSONArray results = page == null ? null : page.optJSONArray("results");
         for (int i = 0; results != null && i < results.length(); i++) {
             JSONObject r = results.optJSONObject(i);
             if (r == null) continue;
             Title t = new Title();
+            t.id = r.optLong("id");
             t.kind = kind;
+            t.genres = genres(r.optJSONArray("genre_ids"));
             t.name = r.optString("tv".equals(kind) ? "name" : "title");
             String date = r.optString("tv".equals(kind) ? "first_air_date" : "release_date");
             t.year = Pick.year(date);

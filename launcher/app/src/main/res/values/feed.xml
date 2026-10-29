@@ -11,9 +11,10 @@
     <string name="feed_add" translatable="false">Add to favourites</string>
     <string name="feed_app_info" translatable="false">App info</string>
     <string name="feed_move_hint" translatable="false">Left and right to move, OK to put it down</string>
-    <string name="feed_new" translatable="false">New this week</string>
-    <string name="feed_new_on" translatable="false">New on %1$s</string>
-    <string name="feed_series" translatable="false">Series</string>
+    <string name="feed_watch_on" translatable="false">▶  Watch on %1$s</string>
+    <string name="feed_by_genre" translatable="false">By genre</string>
+    <string name="feed_series" translatable="false">TV Show</string>
     <string name="feed_movie" translatable="false">Movie</string>
     <string name="bluetooth" translatable="false">Bluetooth</string>
+    <string name="feed_accessories" translatable="false">Remotes &amp; Accessories</string>
 </resources>

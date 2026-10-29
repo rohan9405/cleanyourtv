@@ -40,15 +40,20 @@ final class Feed {
     /** Never in the header: its rows are videos, not releases. */
     static final String YOUTUBE = "com.google.android.youtube.tv";
     private static final String[] COLUMNS = {"row", "row_order", "title", "subtitle", "rating", "progress",
-            "poster", "backdrop", "intent", "package", "section", "tab", "overview", "kind", "year"};
+            "poster", "backdrop", "intent", "package", "section", "tab", "overview", "kind", "year", "genre", "plain_art"};
 
     /** One tile. */
     static final class Entry {
         final String section, tab, title, subtitle, rating, poster, backdrop, intent, pkg, overview, kind, year;
+        /** "Drama, Thriller", empty when unknown. */
+        final String genre;
+        /** The art has no title on it (TMDB backdrops), so Home writes the title over it. */
+        boolean plainArt;
         final int progress, order;
 
         Entry(String section, String tab, int order, String title, String subtitle, String rating, int progress,
-              String poster, String backdrop, String intent, String pkg, String overview, String kind, String year) {
+              String poster, String backdrop, String intent, String pkg, String overview, String kind, String year,
+              String genre) {
             this.section = section == null ? APP : section;
             this.tab = tab == null ? "" : tab;
             this.order = order;
@@ -63,6 +68,7 @@ final class Feed {
             this.overview = overview == null ? "" : overview;
             this.kind = kind == null ? "" : kind;
             this.year = year == null ? "" : year;
+            this.genre = genre == null ? "" : genre;
         }
 
         double ratingValue() {
@@ -73,9 +79,9 @@ final class Feed {
             }
         }
 
-        /** From TMDB rather than the app: no artwork with the title on it, so Home writes the title over it. */
-        boolean fromTmdb() {
-            return !kind.isEmpty();
+        /** Artwork without the title on it: Home writes the title over it. */
+        boolean plainArt() {
+            return plainArt;
         }
     }
 
@@ -174,7 +180,9 @@ final class Feed {
                     while (c != null && c.moveToNext()) {
                         entries.add(new Entry(s(c, "section"), s(c, "tab"), i(c, "row_order"), s(c, "title"),
                                 s(c, "subtitle"), s(c, "rating"), i(c, "progress"), s(c, "poster"), s(c, "backdrop"),
-                                s(c, "intent"), s(c, "package"), s(c, "overview"), s(c, "kind"), s(c, "year")));
+                                s(c, "intent"), s(c, "package"), s(c, "overview"), s(c, "kind"), s(c, "year"),
+                                s(c, "genre")));
+                        entries.get(entries.size() - 1).plainArt = i(c, "plain_art") == 1;
                     }
                 } catch (RuntimeException gone) {
                     return;
@@ -251,6 +259,42 @@ final class Feed {
         for (Entry e : rest) {
             if (out.size() >= total) break;
             out.add(e);
+        }
+        return out;
+    }
+
+    /**
+     * The genre rows: the drawer apps' top 10s pooled (YouTube's videos have no genre), each title once, grouped by its
+     * genres. A genre needs {@code minTitles} titles to get a tab; the tabs go most titles first, up to
+     * {@code maxGenres}, and each row is its best-rated {@code perGenre}.
+     */
+    static Map<String, List<Entry>> genreRows(Map<String, List<Entry>> tabs, List<String> drawer, int perGenre,
+                                              int maxGenres, int minTitles) {
+        Map<String, List<Entry>> byGenre = new LinkedHashMap<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (String pkg : drawer) {
+            List<Entry> l = tabs.get(pkg);
+            if (l == null) continue;
+            for (Entry e : l) {
+                if (e.genre.isEmpty() || !seen.add(e.title.toLowerCase(java.util.Locale.ROOT))) continue;
+                for (String g : e.genre.split(",")) {
+                    String name = g.trim();
+                    if (name.isEmpty()) continue;
+                    List<Entry> list = byGenre.get(name);
+                    if (list == null) byGenre.put(name, list = new ArrayList<>());
+                    list.add(e);
+                }
+            }
+        }
+        List<Map.Entry<String, List<Entry>>> genres = new ArrayList<>(byGenre.entrySet());
+        genres.removeIf(g -> g.getValue().size() < minTitles);
+        Collections.sort(genres, (a, b) -> Integer.compare(b.getValue().size(), a.getValue().size()));
+        Map<String, List<Entry>> out = new LinkedHashMap<>();
+        for (Map.Entry<String, List<Entry>> g : genres) {
+            if (out.size() >= maxGenres) break;
+            List<Entry> l = new ArrayList<>(g.getValue());
+            Collections.sort(l, (a, b) -> Double.compare(b.ratingValue(), a.ratingValue()));
+            out.put(g.getKey(), new ArrayList<>(l.subList(0, Math.min(perGenre, l.size()))));
         }
         return out;
     }

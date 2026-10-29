@@ -38,8 +38,6 @@ final class Refresher {
     static final int TOP = 10;
     /** Header candidates kept per app, ranked: Home uses 5 and dips into the rest to fill 20. */
     private static final int HERO_PER_APP = 10;
-    /** Below this many premieres, a service's series with new episodes count too. */
-    private static final int HERO_MIN_NEW = 5;
     private static final int RATING_BUDGET = 150;
 
     private static final ExecutorService ONE = Executors.newSingleThreadExecutor();
@@ -54,7 +52,9 @@ final class Refresher {
         if (!RUNNING.compareAndSet(false, true)) return;
         ONE.execute(() -> {
             try {
+                long started = android.os.SystemClock.elapsedRealtime();
                 Store.put(app, run(app));
+                android.util.Log.i("Feed", "refresh took " + (android.os.SystemClock.elapsedRealtime() - started) + " ms");
                 app.getContentResolver().notifyChange(FeedProvider.itemsUri(), null);
             } finally {
                 RUNNING.set(false);
@@ -151,8 +151,13 @@ final class Refresher {
             for (Map.Entry<String, Integer> p : Providers.TMDB.entrySet()) {
                 String pkg = p.getKey();
                 if (!installed(pm, pkg)) continue;
+                // Premieres in the window, and series whose new season premiered in it; never a weekly episode of an old one.
                 List<Tmdb.Title> fresh = tmdb.newReleases(p.getValue(), today);
-                if (fresh.size() < HERO_MIN_NEW) fresh.addAll(tmdb.airing(p.getValue(), today));
+                for (Tmdb.Title t : tmdb.newSeasons(p.getValue(), today)) {
+                    boolean dup = false;
+                    for (Tmdb.Title f : fresh) dup |= f.id == t.id && f.kind.equals(t.kind);
+                    if (!dup) fresh.add(t);
+                }
                 for (Tmdb.Title t : fresh) items.add(fromTmdb(t, pkg, Item.HERO, 0));
                 if (!published.containsKey(pkg)) {
                     List<Tmdb.Title> top = tmdb.popular(p.getValue());
@@ -166,7 +171,12 @@ final class Refresher {
         // Ratings (the StreamRatings cache), then the header's ranking, then art.
         Omdb omdb = new Omdb(ctx, RATING_BUDGET);
         for (Item i : items) {
-            if (Pick.rateable(i.pkg)) i.rating = omdb.rating(i.title, i.year);
+            if (!Pick.rateable(i.pkg)) continue;
+            Omdb.Entry e = omdb.lookup(i.title, i.year);
+            if (e == null) continue;
+            i.rating = e.rating;
+            if (i.genre.isEmpty()) i.genre = e.genre;
+            if (i.kind.isEmpty()) i.kind = "series".equals(e.type) ? "tv" : "movie".equals(e.type) ? "movie" : "";
         }
         items = keepHeroTop(items);
         ExecutorService pool = Executors.newFixedThreadPool(4);
@@ -226,7 +236,10 @@ final class Refresher {
         i.year = t.year;
         i.kind = t.kind;
         i.overview = t.overview;
+        i.genre = t.genres;
+        i.subtitle = t.season;
         i.posterSource = t.backdrop;
+        i.plainArt = true;
         i.popularity = t.popularity;
         i.rowOrder = order;
         i.intent = Providers.launchIntent(pkg);

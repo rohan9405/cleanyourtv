@@ -23,6 +23,8 @@ final class Item {
     /** "movie", "tv" or empty. */
     String kind = "";
     String year = "";
+    /** "Comedy, Drama", empty when unknown. */
+    String genre = "";
     /** IMDb rating such as "8.1", empty when unknown. */
     String rating = "";
     /** 0 to 100, -1 unknown. */
@@ -36,14 +38,17 @@ final class Item {
     String pkg = "";
     boolean hero;
     double popularity;
+    /** Artwork without the title on it (TMDB backdrops): Home writes the title over it. App posters carry their own. */
+    boolean plainArt;
 
     JSONObject toJson() throws JSONException {
         return new JSONObject()
                 .put("section", section).put("tab", tab).put("row", row).put("row_order", rowOrder)
                 .put("title", title).put("subtitle", subtitle).put("overview", overview).put("kind", kind)
-                .put("year", year).put("rating", rating).put("progress", progress)
+                .put("year", year).put("genre", genre).put("rating", rating).put("progress", progress)
                 .put("poster_source", posterSource).put("poster", poster).put("backdrop", backdrop)
-                .put("intent", intent).put("package", pkg).put("hero", hero).put("popularity", popularity);
+                .put("intent", intent).put("package", pkg).put("hero", hero).put("popularity", popularity)
+                .put("plain_art", plainArt);
     }
 
     static Item fromJson(JSONObject o) {
@@ -57,6 +62,7 @@ final class Item {
         i.overview = o.optString("overview");
         i.kind = o.optString("kind");
         i.year = o.optString("year");
+        i.genre = o.optString("genre");
         i.rating = o.optString("rating");
         i.progress = o.optInt("progress", -1);
         i.posterSource = o.optString("poster_source");
@@ -66,6 +72,7 @@ final class Item {
         i.pkg = o.optString("package");
         i.hero = o.optBoolean("hero");
         i.popularity = o.optDouble("popularity", 0);
+        i.plainArt = o.optBoolean("plain_art");
         return i;
     }
 

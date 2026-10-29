@@ -46,25 +46,39 @@ final class Omdb {
         final String rating;
         final String year;
         final String released;
+        /** "Comedy, Drama", empty when unknown. */
+        final String genre;
+        /** OMDb's Type: "movie", "series" or "episode"; empty when unknown. */
+        final String type;
         final long savedMs;
+        /** False for entries cached before genre and type were kept: they are asked for again once. */
+        final boolean complete;
 
-        Entry(boolean found, String rating, String year, String released, long savedMs) {
+        Entry(boolean found, String rating, String year, String released, String genre, String type, long savedMs) {
+            this(found, rating, year, released, genre, type, savedMs, true);
+        }
+
+        private Entry(boolean found, String rating, String year, String released, String genre, String type, long savedMs,
+                      boolean complete) {
             this.found = found;
             this.rating = rating;
             this.year = year;
             this.released = released;
+            this.genre = genre == null || "N/A".equals(genre) ? "" : genre;
+            this.type = type == null || "N/A".equals(type) ? "" : type;
             this.savedMs = savedMs;
+            this.complete = complete;
         }
 
         boolean fresh(long nowMs) {
             LocalDate today = LocalDate.now();
-            return CachePolicy.fresh(savedMs, CachePolicy.ttlDays(found, year, released, today), nowMs);
+            return complete && CachePolicy.fresh(savedMs, CachePolicy.ttlDays(found, year, released, today), nowMs);
         }
 
         String toJson() {
             try {
                 return new JSONObject().put("found", found).put("rating", rating).put("year", year)
-                        .put("released", released).put("ts", savedMs).toString();
+                        .put("released", released).put("genre", genre).put("type", type).put("ts", savedMs).toString();
             } catch (JSONException e) {
                 return "";
             }
@@ -76,7 +90,8 @@ final class Omdb {
             try {
                 JSONObject o = new JSONObject(s);
                 return new Entry(o.optBoolean("found"), o.optString("rating"), o.optString("year"),
-                        o.optString("released"), o.optLong("ts"));
+                        o.optString("released"), o.optString("genre"), o.optString("type"), o.optLong("ts"),
+                        !o.optBoolean("found") || o.has("genre"));
             } catch (JSONException e) {
                 return null;
             }
@@ -85,19 +100,27 @@ final class Omdb {
 
     /** "8.1", or empty when there is no key, no match, or no rating yet. */
     String rating(String title, String year) {
+        Entry e = lookup(title, year);
+        return e == null ? "" : e.rating;
+    }
+
+    /**
+     * The rating, genre and type, or null when there is no key or nothing is known yet. A stale or older entry is
+     * returned when the lookup cannot be made (no network, budget spent), so a tile keeps what it had.
+     */
+    Entry lookup(String title, String year) {
         String clean = Pick.cleanTitle(title);
-        if (apiKey.isEmpty() || clean.isEmpty()) return "";
+        if (apiKey.isEmpty() || clean.isEmpty()) return null;
         String cacheKey = "r:" + clean.toLowerCase(Locale.ROOT) + "|" + year;
         Entry cached = Entry.parse(prefs.getString(cacheKey, null));
         long now = System.currentTimeMillis();
-        String stale = cached == null ? "" : cached.rating;
-        if (cached != null && cached.fresh(now)) return cached.rating;
-        if (budget <= 0) return stale;
+        if (cached != null && cached.fresh(now)) return cached;
+        if (budget <= 0) return cached;
         budget--;
         Entry fetched = fetch(clean, year, now);
-        if (fetched == null) return stale;   // network trouble: keep the last rating, cache nothing
+        if (fetched == null) return cached;   // network trouble: keep the last answer, cache nothing
         prefs.edit().putString(cacheKey, fetched.toJson()).apply();
-        return fetched.rating;
+        return fetched;
     }
 
     /**
@@ -162,6 +185,8 @@ final class Omdb {
             return new Entry(found, rating.matches("\\d(\\.\\d)?|10(\\.0)?") ? rating : "",
                     data.isNull("year") ? "" : data.optString("year"),
                     data.isNull("released") ? "" : data.optString("released"),
+                    data.isNull("genre") ? "" : data.optString("genre"),
+                    data.isNull("type") ? "" : data.optString("type"),
                     o.optLong("ts", System.currentTimeMillis()));
         }
         if (code >= 400 && code < 500 && o != null && o.has("error")) throw new IllegalStateException(o.optString("error"));
@@ -177,10 +202,10 @@ final class Omdb {
             // "Invalid API key!" or "Request limit reached!" is not an answer about the title: don't cache it.
             String error = o.optString("Error").toLowerCase(Locale.ROOT);
             if (error.contains("key") || error.contains("limit")) throw new IllegalStateException(error);
-            return new Entry(false, "", "", "", now);
+            return new Entry(false, "", "", "", "", "", now);
         }
         String rating = o.optString("imdbRating");
         return new Entry(true, rating.matches("\\d(\\.\\d)?|10(\\.0)?") ? rating : "",
-                o.optString("Year"), o.optString("Released"), now);
+                o.optString("Year"), o.optString("Released"), o.optString("Genre"), o.optString("Type"), now);
     }
 }

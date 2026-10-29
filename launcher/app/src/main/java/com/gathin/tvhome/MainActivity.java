@@ -2562,12 +2562,24 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         View bluetooth = findViewById(R.id.btnBluetooth);
         bluetooth.setVisibility(View.VISIBLE);
         bluetooth.setOnClickListener(v -> {
-            try {
-                startActivity(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-            } catch (RuntimeException e) {
-                startActivity(new Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            // Remotes & Accessories: Google TV's settings show it as a slice page, with no action of its own; the
+            // Bluetooth action does not resolve on Google TV (a Sony BRAVIA BF1 answers it with nothing).
+            Intent page = new Intent("android.settings.SLICE_SETTINGS")
+                    .putExtra("slice_uri", "content://com.android.tv.settings.accessories.sliceprovider/general")
+                    .putExtra("slice_title", getString(R.string.feed_accessories));
+            for (Intent i : new Intent[] {page, new Intent(Settings.ACTION_BLUETOOTH_SETTINGS), new Intent(Settings.ACTION_SETTINGS)}) {
+                try {
+                    startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                    return;
+                } catch (RuntimeException notHere) {
+                    // The next one.
+                }
             }
         });
+        // A shorter date beside the clock: "THU, 29 OCT".
+        android.widget.TextClock date = findViewById(R.id.date);
+        date.setFormat12Hour("EEE, d MMM");
+        date.setFormat24Hour("EEE, d MMM");
     }
 
     private void focusTile(int position) {

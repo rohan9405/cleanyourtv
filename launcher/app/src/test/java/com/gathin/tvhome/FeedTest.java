@@ -12,7 +12,25 @@ import org.junit.Test;
 
 public class FeedTest {
     private static Feed.Entry e(String section, String tab, int order, String title, String rating) {
-        return new Feed.Entry(section, tab, order, title, "", rating, -1, "", "", "x", tab, "", "", "");
+        return new Feed.Entry(section, tab, order, title, "", rating, -1, "", "", "x", tab, "", "", "", "");
+    }
+
+    private static Feed.Entry g(String tab, String title, String rating, String genre) {
+        return new Feed.Entry(Feed.APP, tab, 1, title, "", rating, -1, "", "", "x", tab, "", "tv", "", genre);
+    }
+
+    @Test
+    public void genreRowsPoolDrawerAppsOnceEachBestFirst() {
+        Map<String, List<Feed.Entry>> tabs = new java.util.LinkedHashMap<>();
+        tabs.put("n", Arrays.asList(g("n", "A", "7.0", "Drama, Crime"), g("n", "B", "9.0", "Drama"), g("n", "C", "8.0", "Comedy")));
+        tabs.put("p", Arrays.asList(g("p", "D", "8.5", "Drama"), g("p", "a", "6.0", "Drama"), g("p", "E", "7.5", "Comedy, Drama")));
+        tabs.put("x", Arrays.asList(g("x", "F", "9.9", "Drama")));   // not in the drawer
+        Map<String, List<Feed.Entry>> rows = Feed.genreRows(tabs, Arrays.asList("n", "p"), 10, 8, 2);
+        assertEquals(Arrays.asList("Drama", "Comedy"), new ArrayList<>(rows.keySet()));   // Crime has 1 title: no tab
+        List<Feed.Entry> drama = rows.get("Drama");
+        assertEquals(4, drama.size());   // A, B, D, E: "a" is A again
+        assertEquals("B", drama.get(0).title);
+        assertEquals("D", drama.get(1).title);
     }
 
     @Test

@@ -44,6 +44,7 @@ final class Demo {
     private static final String YOUTUBE = "com.google.android.youtube.tv";
     private static final String SONYLIV = "com.sonyliv";
     private static final String ZEE5 = "com.graymatrix.did";
+    private static final String[] GENRES = {"Crime, Drama", "Drama", "Comedy, Drama", "Thriller, Crime", "Comedy"};
     private static final String PLOT = "A sample title for previewing Home: the real header shows what is new on your "
             + "services in the last 10 days, with its IMDb rating.";
 
@@ -82,6 +83,7 @@ final class Demo {
         Item i = add(ctx, items, Item.HERO, "", 0, title, "", rating, -1, pkg, colour);
         i.kind = kind;
         i.year = year;
+        i.genre = "Drama, Thriller";
         i.overview = PLOT;
         i.backdrop = draw(ctx, i.posterSource, title, colour, true);
     }
@@ -91,6 +93,10 @@ final class Demo {
             String[] t = titles[n].split("\\|", -1);
             Item i = add(ctx, items, Item.APP, "", n + 1, t[0], "", t[1], -1, pkg, colour + n * 0x00080808);
             i.overview = PLOT;
+            if (!t[1].isEmpty()) {
+                i.kind = n % 3 == 1 ? "movie" : "tv";
+                i.genre = GENRES[(n + t[0].length()) % GENRES.length];
+            }
         }
     }
 
