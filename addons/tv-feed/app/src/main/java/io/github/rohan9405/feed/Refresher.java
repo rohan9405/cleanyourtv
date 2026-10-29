@@ -162,7 +162,7 @@ final class Refresher {
                     if (!dup) fresh.add(t);
                 }
                 for (Tmdb.Title t : fresh) {
-                    if (Pick.recentEnough(t.year, t.season, today.getYear())) items.add(fromTmdb(t, pkg, Item.HERO, 0));
+                    if (Pick.recentEnough(t.released, t.season, today)) items.add(fromTmdb(t, pkg, Item.HERO, 0));
                 }
                 for (Tmdb.Title t : tmdb.genrePool(p.getValue(), POOL_PER_GENRE)) {
                     if (!hasTitle(items, pkg, t.name)) items.add(fromTmdb(t, pkg, Item.POOL, 0));
@@ -245,6 +245,7 @@ final class Refresher {
         i.kind = t.kind;
         i.overview = t.overview;
         i.genre = t.genres;
+        i.released = t.released;
         i.subtitle = t.season;
         i.posterSource = t.backdrop;
         i.plainArt = true;

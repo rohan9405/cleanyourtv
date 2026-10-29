@@ -108,6 +108,17 @@ public class FeedTest {
     }
 
     @Test
+    public void heroShowsATitleOnTwoServicesOnce() {
+        Map<String, List<Feed.Entry>> c = new java.util.LinkedHashMap<>();
+        c.put("prime", Arrays.asList(e(Feed.HERO, "prime", 1, "The Awakening", "7.0")));
+        c.put("hotstar", Arrays.asList(e(Feed.HERO, "hotstar", 1, "The Awakening", "7.0"), e(Feed.HERO, "hotstar", 2, "The Mob", "6.0")));
+        List<Feed.Entry> out = Feed.pickHero(c, Arrays.asList("prime", "hotstar"), 5, 20);
+        assertEquals(2, out.size());
+        assertEquals("prime", out.get(0).tab);
+        assertEquals("The Mob", out.get(1).title);
+    }
+
+    @Test
     public void heroStopsAtTotal() {
         Map<String, List<Feed.Entry>> c = new java.util.HashMap<>();
         c.put("a", ranked("a", 10));

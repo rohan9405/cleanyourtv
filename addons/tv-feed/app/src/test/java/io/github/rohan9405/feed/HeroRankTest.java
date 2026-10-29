@@ -43,12 +43,27 @@ public class HeroRankTest {
     }
 
     @Test
-    public void oldCatalogueFilmsAreNotRecent() {
-        assertEquals(true, Pick.recentEnough("2026", "", 2026));
-        assertEquals(true, Pick.recentEnough("2025", "", 2026));
-        assertEquals(false, Pick.recentEnough("1999", "", 2026));
-        assertEquals(true, Pick.recentEnough("2026", "Season 23", 2026));
-        assertEquals(false, Pick.recentEnough("", "", 2026));
+    public void recentByFirstReleaseDateNotStreamingDate() {
+        java.time.LocalDate today = java.time.LocalDate.of(2026, 10, 30);
+        assertEquals(true, Pick.recentEnough("2026-10-23", "", today));     // Gajab Raat
+        assertEquals(true, Pick.recentEnough("2025-11-15", "", today));     // within a year
+        assertEquals(false, Pick.recentEnough("2025-09-19", "", today));    // Kurla To Vengurla: 13 months
+        assertEquals(false, Pick.recentEnough("2016-09-09", "", today));    // Baar Baar Dekho
+        assertEquals(false, Pick.recentEnough("2023-10-27", "", today));    // Sumo Didi
+        assertEquals(true, Pick.recentEnough("2026-10-20", "Season 23", today));
+        assertEquals(false, Pick.recentEnough("2026-11-20", "", today));    // not out yet
+        assertEquals(false, Pick.recentEnough("", "", today));
+    }
+
+    @Test
+    public void sameTierAndRatingNewerFirst() {
+        Item older = hero("n", "older", "8.0", 10);
+        older.year = "2026";
+        older.released = "2026-10-10";
+        Item newer = hero("n", "newer", "8.0", 1);
+        newer.year = "2026";
+        newer.released = "2026-10-25";
+        assertEquals("newer", Pick.rankHero(Arrays.asList(older, newer), 2026).get(0).title);
     }
 
     @Test

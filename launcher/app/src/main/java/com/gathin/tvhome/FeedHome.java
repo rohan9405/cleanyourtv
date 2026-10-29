@@ -1082,12 +1082,12 @@ final class FeedHome {
         // Brand-new titles often have no rating yet: the type and year then start where the tag would have.
         ((LinearLayout.LayoutParams) heroMeta.getLayoutParams()).leftMargin = e.rating.isEmpty() ? 0 : dp(12);
         heroMeta.requestLayout();
+        // After the IMDb tag: year, genres, and the season for a series that counts as new because of it.
         List<String> meta = new ArrayList<>();
-        String kind = kindLabel(e);
-        if (!kind.isEmpty()) meta.add(kind);
-        if (!e.subtitle.isEmpty()) meta.add(e.subtitle);   // "Season 3": why it counts as new
-        if (!e.genre.isEmpty()) meta.add(e.genre);
         if (!e.year.isEmpty()) meta.add(e.year);
+        String genres = genreNames(e.genre);
+        if (!genres.isEmpty()) meta.add(genres);
+        if (!e.subtitle.isEmpty()) meta.add(e.subtitle);
         heroMeta.setText(TextUtils.join("  ·  ", meta));
         heroPlot.setText(e.overview);
         heroPlot.setVisibility(e.overview.isEmpty() ? View.GONE : View.VISIBLE);
@@ -1189,6 +1189,16 @@ final class FeedHome {
         }
     }
 
+    /** "Drama, Action" from "Drama, Action & Adventure": one name per genre, each once. */
+    private static String genreNames(String genre) {
+        List<String> names = new ArrayList<>();
+        for (String g : genre.split(",")) {
+            String n = Feed.genreName(g);
+            if (!n.isEmpty() && !names.contains(n)) names.add(n);
+        }
+        return TextUtils.join(", ", names);
+    }
+
     /** "TV show" or "Movie", empty when the add-on could not tell. */
     private String kindLabel(Feed.Entry e) {
         if ("tv".equals(e.kind)) return act.getString(R.string.feed_series);
@@ -1201,14 +1211,8 @@ final class FeedHome {
         List<String> parts = new ArrayList<>();
         String kind = kindLabel(e);
         if (!kind.isEmpty()) parts.add(kind);
-        if (!e.genre.isEmpty()) {
-            List<String> names = new ArrayList<>();
-            for (String g : e.genre.split(",")) {
-                String n = Feed.genreName(g);
-                if (!n.isEmpty() && !names.contains(n)) names.add(n);
-            }
-            parts.add(TextUtils.join(", ", names));
-        }
+        String genres = genreNames(e.genre);
+        if (!genres.isEmpty()) parts.add(genres);
         if (!e.year.isEmpty()) parts.add(e.year);
         return TextUtils.join("  ·  ", parts);
     }
