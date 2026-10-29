@@ -30,6 +30,28 @@ public class HeroRankTest {
     }
 
     @Test
+    public void thisYearsTitlesFirstThenNewSeasonsThenOlder() {
+        Item old = hero("n", "old", "9.5", 50);
+        old.year = "2025";
+        Item season = hero("n", "season", "9.0", 50);
+        season.year = "2026";
+        season.subtitle = "Season 4";
+        Item fresh = hero("n", "fresh", "7.0", 1);
+        fresh.year = "2026";
+        List<Item> r = Pick.rankHero(Arrays.asList(old, season, fresh), 2026);
+        assertEquals(Arrays.asList("fresh", "season", "old"), Arrays.asList(r.get(0).title, r.get(1).title, r.get(2).title));
+    }
+
+    @Test
+    public void oldCatalogueFilmsAreNotRecent() {
+        assertEquals(true, Pick.recentEnough("2026", "", 2026));
+        assertEquals(true, Pick.recentEnough("2025", "", 2026));
+        assertEquals(false, Pick.recentEnough("1999", "", 2026));
+        assertEquals(true, Pick.recentEnough("2026", "Season 23", 2026));
+        assertEquals(false, Pick.recentEnough("", "", 2026));
+    }
+
+    @Test
     public void tenPerAppAndOtherSectionsUntouched() {
         List<Item> in = new ArrayList<>();
         Item cont = new Item();

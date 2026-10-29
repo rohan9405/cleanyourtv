@@ -24,7 +24,7 @@ import java.util.List;
 public final class FeedProvider extends ContentProvider {
     static final String AUTHORITY = "io.github.rohan9405.feed";
     static final String[] COLUMNS = {"row", "row_order", "title", "subtitle", "rating", "progress",
-            "poster", "backdrop", "intent", "package", "hero", "section", "tab", "overview", "kind", "year", "genre", "plain_art"};
+            "poster", "backdrop", "intent", "package", "hero", "section", "tab", "overview", "kind", "year", "genre", "plain_art", "engaged"};
 
     static Uri itemsUri() {
         return new Uri.Builder().scheme(ContentResolver.SCHEME_CONTENT).authority(AUTHORITY).appendPath("items").build();
@@ -51,7 +51,7 @@ public final class FeedProvider extends ContentProvider {
             c.addRow(new Object[] {i.row, i.rowOrder, i.title, i.subtitle, i.rating, i.progress,
                     i.poster.isEmpty() ? "" : imageUri(i.poster).toString(),
                     i.backdrop.isEmpty() ? "" : imageUri(i.backdrop).toString(),
-                    i.intent, i.pkg, i.hero ? 1 : 0, i.section, i.tab, i.overview, i.kind, i.year, i.genre, i.plainArt ? 1 : 0});
+                    i.intent, i.pkg, i.hero ? 1 : 0, i.section, i.tab, i.overview, i.kind, i.year, i.genre, i.plainArt ? 1 : 0, i.engaged});
         }
         c.setNotificationUri(getContext().getContentResolver(), itemsUri());
         return c;

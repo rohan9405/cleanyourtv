@@ -40,6 +40,8 @@ final class Item {
     String pkg = "";
     boolean hero;
     double popularity;
+    /** Continue watching: when it was last watched (epoch ms), 0 when the app does not say. */
+    long engaged;
     /** Artwork without the title on it (TMDB backdrops): Home writes the title over it. App posters carry their own. */
     boolean plainArt;
 
@@ -50,7 +52,7 @@ final class Item {
                 .put("year", year).put("genre", genre).put("rating", rating).put("progress", progress)
                 .put("poster_source", posterSource).put("poster", poster).put("backdrop", backdrop)
                 .put("intent", intent).put("package", pkg).put("hero", hero).put("popularity", popularity)
-                .put("plain_art", plainArt);
+                .put("plain_art", plainArt).put("engaged", engaged);
     }
 
     static Item fromJson(JSONObject o) {
@@ -75,6 +77,7 @@ final class Item {
         i.hero = o.optBoolean("hero");
         i.popularity = o.optDouble("popularity", 0);
         i.plainArt = o.optBoolean("plain_art");
+        i.engaged = o.optLong("engaged");
         return i;
     }
 
