@@ -42,7 +42,7 @@ final class Feed {
     /** Never in the header: its rows are videos, not releases. */
     static final String YOUTUBE = "com.google.android.youtube.tv";
     private static final String[] COLUMNS = {"row", "row_order", "title", "subtitle", "rating", "progress",
-            "poster", "backdrop", "intent", "package", "section", "tab", "overview", "kind", "year", "genre", "plain_art", "engaged"};
+            "poster", "backdrop", "intent", "package", "section", "tab", "overview", "kind", "year", "genre", "plain_art", "engaged", "released"};
 
     /** One tile. */
     static final class Entry {
@@ -53,6 +53,8 @@ final class Feed {
         boolean plainArt;
         /** Continue watching: when it was last watched (epoch ms), 0 when the app does not say. */
         long engaged;
+        /** "2026-10-23": first release (a new season: its premiere); empty when unknown. */
+        String released = "";
         final int progress, order;
 
         Entry(String section, String tab, int order, String title, String subtitle, String rating, int progress,
@@ -195,6 +197,7 @@ final class Feed {
                         entries.get(entries.size() - 1).plainArt = i(c, "plain_art") == 1;
                         int ec = c.getColumnIndex("engaged");
                         entries.get(entries.size() - 1).engaged = ec < 0 || c.isNull(ec) ? 0 : c.getLong(ec);
+                        entries.get(entries.size() - 1).released = s(c, "released");
                     }
                 } catch (RuntimeException gone) {
                     return;
@@ -251,12 +254,16 @@ final class Feed {
     static List<Entry> pickHero(Map<String, List<Entry>> candidates, List<String> drawer, int perApp, int total) {
         List<List<Entry>> firsts = new ArrayList<>();
         List<Entry> rest = new ArrayList<>();
+        // A title on two services (The Awakening, on Prime Video and JioHotstar) is shown once: the first drawer app's.
+        java.util.Set<String> seen = new java.util.HashSet<>();
         for (String pkg : drawer) {
             if (YOUTUBE.equals(pkg)) continue;
             List<Entry> l = candidates.get(pkg);
             if (l == null || l.isEmpty()) continue;
-            firsts.add(l.subList(0, Math.min(perApp, l.size())));
-            rest.addAll(l.subList(Math.min(perApp, l.size()), l.size()));
+            List<Entry> own = new ArrayList<>();
+            for (Entry e : l) if (seen.add(e.title.toLowerCase(java.util.Locale.ROOT))) own.add(e);
+            firsts.add(own.subList(0, Math.min(perApp, own.size())));
+            rest.addAll(own.subList(Math.min(perApp, own.size()), own.size()));
         }
         List<Entry> out = new ArrayList<>();
         for (int i = 0; out.size() < total; i++) {

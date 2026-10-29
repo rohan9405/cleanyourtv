@@ -38,6 +38,8 @@ final class Tmdb {
         String genres = "";
         /** "Season 3" when the title counts as new because a season of it premiered in the window. */
         String season = "";
+        /** "2026-10-23": when it first came out anywhere (a new season: when the season premiered). */
+        String released = "";
         String name = "";
         String year = "";
         String overview = "";
@@ -67,7 +69,12 @@ final class Tmdb {
         return !token.isEmpty();
     }
 
-    /** New in the last {@value #NEW_DAYS} days: series that premiered, films that premiered or came out digitally. */
+    /**
+     * New on the service in the last {@value #NEW_DAYS} days: series that premiered, films that premiered, and films
+     * that came out digitally in India. A digital release carries its streaming date, not when the film first came
+     * out (Baar Baar Dekho, 2016, reached Netflix in October 2026), so each film's original date is looked up and
+     * kept: the caller decides from it whether the film is recent.
+     */
     List<Title> newReleases(int provider, LocalDate today) {
         String from = today.minusDays(NEW_DAYS).toString(), to = today.toString();
         List<Title> out = new ArrayList<>();
@@ -75,7 +82,17 @@ final class Tmdb {
         add(out, discover("movie", provider, "primary_release_date.gte", from, "primary_release_date.lte", to), "movie");
         add(out, discover("movie", provider, "release_date.gte", from, "release_date.lte", to,
                 "region", Providers.REGION, "with_release_type", "4|6"), "movie");
-        return dedupe(out);
+        List<Title> titles = dedupe(out);
+        for (Title t : titles) {
+            if (!"movie".equals(t.kind)) continue;
+            JSONObject film = get("/3/movie/" + t.id);
+            String first = film == null ? "" : film.optString("release_date");
+            if (!first.isEmpty()) {
+                t.released = first;
+                t.year = Pick.year(first);
+            }
+        }
+        return titles;
     }
 
     /**
@@ -99,6 +116,7 @@ final class Tmdb {
                     t.season = "Season " + season.optInt("season_number");
                     // The season is what is new: its year, not the show's first ("Season 23 · 2026", not "2005").
                     t.year = String.valueOf(premiere.getYear());
+                    t.released = premiere.toString();
                     out.add(t);
                     break;
                 }
@@ -206,6 +224,7 @@ final class Tmdb {
             t.name = r.optString("tv".equals(kind) ? "name" : "title");
             String date = r.optString("tv".equals(kind) ? "first_air_date" : "release_date");
             t.year = Pick.year(date);
+            t.released = date;
             t.overview = r.optString("overview");
             String backdrop = r.isNull("backdrop_path") ? "" : r.optString("backdrop_path");
             t.backdrop = backdrop.isEmpty() ? "" : IMAGES + "w1280" + backdrop;

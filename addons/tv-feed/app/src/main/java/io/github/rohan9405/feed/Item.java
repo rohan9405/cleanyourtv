@@ -27,6 +27,8 @@ final class Item {
     String year = "";
     /** "Comedy, Drama", empty when unknown. */
     String genre = "";
+    /** "2026-10-23": first release (a new season: its premiere); empty when unknown. */
+    String released = "";
     /** IMDb rating such as "8.1", empty when unknown. */
     String rating = "";
     /** 0 to 100, -1 unknown. */
@@ -49,7 +51,7 @@ final class Item {
         return new JSONObject()
                 .put("section", section).put("tab", tab).put("row", row).put("row_order", rowOrder)
                 .put("title", title).put("subtitle", subtitle).put("overview", overview).put("kind", kind)
-                .put("year", year).put("genre", genre).put("rating", rating).put("progress", progress)
+                .put("year", year).put("released", released).put("genre", genre).put("rating", rating).put("progress", progress)
                 .put("poster_source", posterSource).put("poster", poster).put("backdrop", backdrop)
                 .put("intent", intent).put("package", pkg).put("hero", hero).put("popularity", popularity)
                 .put("plain_art", plainArt).put("engaged", engaged);
@@ -67,6 +69,7 @@ final class Item {
         i.kind = o.optString("kind");
         i.year = o.optString("year");
         i.genre = o.optString("genre");
+        i.released = o.optString("released");
         i.rating = o.optString("rating");
         i.progress = o.optInt("progress", -1);
         i.posterSource = o.optString("poster_source");

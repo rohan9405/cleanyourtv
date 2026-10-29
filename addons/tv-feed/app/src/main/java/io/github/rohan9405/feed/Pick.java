@@ -98,7 +98,9 @@ final class Pick {
             int t = Integer.compare(heroTier(a, thisYear), heroTier(b, thisYear));
             if (t != 0) return t;
             int r = Double.compare(b.ratingValue(), a.ratingValue());
-            return r != 0 ? r : Double.compare(b.popularity, a.popularity);
+            if (r != 0) return r;
+            int d = b.released.compareTo(a.released);   // ISO dates: the newer first
+            return d != 0 ? d : Double.compare(b.popularity, a.popularity);
         });
         return out;
     }
@@ -108,17 +110,24 @@ final class Pick {
         return i.subtitle.isEmpty() ? 0 : 1;
     }
 
+    /** A title first released this long ago or less is recent; older ones that just reached a service are not. */
+    static final int RECENT_DAYS = 365;
+
     /**
-     * Recent enough for the header: from this year or last, or a new season (its year is the season's). An older film
-     * that only has a fresh digital date in TMDB is a catalogue title, not a release.
+     * Recent enough for the header, by its first release date (day, month and year): out within the last
+     * {@value #RECENT_DAYS} days and not in the future. A new season is judged by its own premiere. An older film that
+     * only has a fresh streaming date is a catalogue title, not a release.
      */
-    static boolean recentEnough(String year, String season, int thisYear) {
-        if (season != null && !season.isEmpty()) return true;
+    static boolean recentEnough(String released, String season, java.time.LocalDate today) {
+        java.time.LocalDate date;
         try {
-            return Integer.parseInt(year) >= thisYear - 1;
-        } catch (NumberFormatException e) {
+            date = java.time.LocalDate.parse(released);
+        } catch (RuntimeException e) {
             return false;
         }
+        if (date.isAfter(today)) return false;
+        if (season != null && !season.isEmpty()) return true;
+        return !date.isBefore(today.minusDays(RECENT_DAYS));
     }
 
     /** Best IMDb rating first; unrated titles (often too new to have one) after them, most popular first. */
