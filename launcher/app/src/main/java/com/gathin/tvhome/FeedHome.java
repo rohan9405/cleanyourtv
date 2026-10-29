@@ -949,6 +949,9 @@ final class FeedHome {
         heroTitle.setText(e.title);
         heroTag.removeAllViews();
         if (!e.rating.isEmpty()) imdbTag(heroTag, e.rating, false);
+        // Brand-new titles often have no rating yet: the type and year then start where the tag would have.
+        ((LinearLayout.LayoutParams) heroMeta.getLayoutParams()).leftMargin = e.rating.isEmpty() ? 0 : dp(12);
+        heroMeta.requestLayout();
         List<String> meta = new ArrayList<>();
         if ("tv".equals(e.kind)) meta.add(act.getString(R.string.feed_series));
         else if ("movie".equals(e.kind)) meta.add(act.getString(R.string.feed_movie));
