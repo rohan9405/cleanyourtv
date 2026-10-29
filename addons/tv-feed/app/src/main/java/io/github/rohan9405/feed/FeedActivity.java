@@ -4,14 +4,11 @@ package io.github.rohan9405.feed;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.graphics.Color;
 import android.os.Bundle;
-import android.text.InputType;
 import android.text.format.DateUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -21,21 +18,20 @@ import java.util.Map;
 
 /**
  * The Feed screen, and the module card's target: what each app on this TV publishes (the probe), the rows Home
- * gets, the OMDb key and a Refresh button. {@code am start -n io.github.rohan9405.feed/.FeedActivity --es omdb_key
- * <key>} sets the key from a computer.
+ * gets, the OMDb key and a Refresh button.
+ *
+ * <p>Set up from a computer without the remote (my-tv/omdb-key.sh): {@code --es omdb_key <key>} or
+ * {@code --ez demo true|false} stores the setting, starts a refresh and closes at once, with nothing shown.
  */
 public final class FeedActivity extends Activity {
     private TextView status;
-    private EditText key;
 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
-        String fromIntent = getIntent().getStringExtra("omdb_key");
-        if (fromIntent != null) Omdb.setKey(this, fromIntent);
-        if (getIntent().hasExtra("demo")) {
-            Demo.set(this, getIntent().getBooleanExtra("demo", false));
-            Refresher.kick(this, null);
+        if (applySetup(getIntent())) {
+            finish();
+            return;
         }
 
         float d = getResources().getDisplayMetrics().density;
@@ -65,25 +61,6 @@ public final class FeedActivity extends Activity {
         }
         col.addView(buttons);
 
-        LinearLayout keyRow = new LinearLayout(this);
-        keyRow.setOrientation(LinearLayout.HORIZONTAL);
-        key = new EditText(this);
-        key.setHint(R.string.omdb_hint);
-        key.setHintTextColor(0x80FFFFFF);
-        key.setTextColor(Color.WHITE);
-        key.setSingleLine(true);
-        key.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        keyRow.addView(key, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-        Button save = new Button(this);
-        save.setText(R.string.save_key);
-        save.setOnClickListener(v -> {
-            Omdb.setKey(this, key.getText().toString());
-            key.setText("");
-            refresh();
-        });
-        keyRow.addView(save);
-        col.addView(keyRow);
-
         status = text(15, 0xCCFFFFFF);
         status.setPadding(0, (int) (16 * d), 0, 0);
         status.setLineSpacing(4 * d, 1f);
@@ -112,7 +89,8 @@ public final class FeedActivity extends Activity {
         StringBuilder b = new StringBuilder();
         b.append("Reading TV rows: ").append(checkSelfPermission(Refresher.READ_TV)
                 == PackageManager.PERMISSION_GRANTED ? "allowed" : "not allowed yet").append('\n');
-        b.append("IMDb ratings: ").append(Omdb.hasKey(this) ? "OMDb key set" : "no OMDb key").append('\n');
+        b.append("IMDb ratings: ").append(Omdb.hasKey(this) ? "OMDb key set"
+                : "no OMDb key yet (sent from the Mac: my-tv/omdb-key.sh send)").append('\n');
         b.append("Last refresh: ").append(s.refreshedMs == 0 ? "never"
                 : DateUtils.getRelativeTimeSpanString(s.refreshedMs)).append('\n');
         if (!s.error.isEmpty()) b.append("Problem: ").append(s.error).append('\n');
@@ -160,10 +138,22 @@ public final class FeedActivity extends Activity {
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        if (applySetup(intent)) show();
+    }
+
+    /** A setup intent from a computer: store what it carries and refresh. False for an ordinary start. */
+    private boolean applySetup(Intent intent) {
+        boolean setup = false;
         String k = intent.getStringExtra("omdb_key");
         if (k != null) {
             Omdb.setKey(this, k);
-            refresh();
+            setup = true;
         }
+        if (intent.hasExtra("demo")) {
+            Demo.set(this, intent.getBooleanExtra("demo", false));
+            setup = true;
+        }
+        if (setup) Refresher.kick(this, null);
+        return setup;
     }
 }

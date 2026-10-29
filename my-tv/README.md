@@ -30,10 +30,12 @@ TV_HOST=<tv ip> tools/venv/bin/python -I tools/tv.py 'pm grant io.github.rohan94
 TV_HOST=<tv ip> tools/theme.sh my-tv/theme
 ```
 
-IMDb ratings need a free OMDb key (omdbapi.com/apikey.aspx); type it on the Feed screen, or:
+IMDb ratings need a free OMDb key (omdbapi.com/apikey.aspx). It is kept on this Mac in
+`~/.cleantv-private/omdb_key`, outside the repo, and sent to the TV over ADB; nothing is typed with the remote:
 
 ```bash
-TV_HOST=<tv ip> tools/venv/bin/python -I tools/tv.py 'am start -n io.github.rohan9405.feed/.FeedActivity --es omdb_key <key>'
+my-tv/omdb-key.sh save                        # once: paste the key (hidden), checked with OMDb
+TV_HOST=<tv ip> my-tv/omdb-key.sh send        # after installing the Feed add-on (--emulator for the preview)
 ```
 
 ## Switching back
