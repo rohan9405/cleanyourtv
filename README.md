@@ -13,9 +13,9 @@ The original project's README, with the debloat guide and the launcher's own doc
 
 | | |
 |---|---|
-| ![The header carousel focused, with a Watch on Netflix button](docs/fork/header.jpg) | **Header carousel.** Titles that came out on your drawer apps in the last 14 days: new films, new shows and new seasons. Up to 5 per app, 20 in all, best IMDb rating first. It shows the app's logo, the title, an IMDb tag, type, genres, year and a line of plot over the full-screen backdrop, and turns every 8 seconds. Press Up from the drawer to take it over: Left and Right turn it round, OK opens the app. YouTube is left out. |
+| ![The header carousel focused, with a Watch on Netflix button](docs/fork/header.jpg) | **Header carousel.** Recent releases on your drawer apps, from the last 14 days: titles first released this year come first, then new seasons out this year, then anything older that has only just come to streaming; very old catalogue titles are left out. Up to 5 per app, 20 in all, best IMDb rating first within each. It shows the app's logo, the title, an IMDb tag, type, genres, year and a line of plot over the full-screen backdrop, and turns every 8 seconds. Press Up from the drawer to take it over: Left and Right turn it round, OK opens the app. YouTube is left out. |
 | ![Holding OK on Netflix in the drawer: Open, Move, Remove from favourites, App info](docs/fork/drawer-menu.jpg) | **App drawer.** Your favourite apps on one line; the tiles shrink so every app fits. Edit it the Google TV way: hold OK on an app for **Open, Move, Remove from favourites, App info**, and hold OK on any app under Apps to **Add to favourites**. |
-| ![Top 10 tabs for each drawer app above the genre tabs](docs/fork/top10.jpg) | **Continue watching**, from the apps that publish it, with progress bars, ratings and the app's badge. Then **Top 10**: a tab per drawer app, and Left and Right change the row. Under a row, the focused title's type, genres and year. |
+| ![Top 10 tabs for each drawer app above the genre tabs](docs/fork/top10.jpg) | **Continue watching**, from the apps that publish it, with progress bars, ratings and the app's badge. Hold OK on a title to **remove it from Continue watching**: it stays gone across restarts and comes back only once you watch it again. Then **Top 10**: a tab per drawer app, and Left and Right change the row. Under a row, the focused title's type, genres and year. |
 | ![Top 10 by genre: Sci-Fi, with titles from Netflix, Prime Video, JioHotstar and Apple TV](docs/fork/genres.jpg) | **By genre.** Drama, Comedy, Action, Sci-Fi and more, each row taking your drawer apps in turn so no single app fills it. |
 | ![The Apps grid with every other installed app](docs/fork/apps.jpg) | **Apps.** Every other installed app. |
 
@@ -25,7 +25,8 @@ Accessories) and Settings. Google's ambient screensaver stays.
 ## Features
 
 **Home**
-- Header carousel of new releases with animated dots, focusable, opening the title's app.
+- Header carousel of recent releases (this year's first) with animated dots, focusable, opening the title's app.
+- Continue watching titles can be removed with a long press; they return only when watched again.
 - App drawer on one line, edited with a long press: move, remove, add, app info.
 - Continue watching, Top 10 per app (tabs), Top 10 by genre (tabs), and the full app grid.
 - IMDb tag on every rated tile and in the header; TV show or Movie, genres and year in captions.

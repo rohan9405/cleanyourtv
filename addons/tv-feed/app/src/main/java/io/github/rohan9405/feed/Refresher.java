@@ -100,6 +100,7 @@ final class Refresher {
                 i.tab = pkg;
                 i.row = continueRow;
                 i.progress = progress;
+                i.engaged = engaged;
                 i.subtitle = Pick.subtitle(str(c, TvContract.WatchNextPrograms.COLUMN_SEASON_DISPLAY_NUMBER),
                         str(c, TvContract.WatchNextPrograms.COLUMN_EPISODE_DISPLAY_NUMBER),
                         str(c, TvContract.WatchNextPrograms.COLUMN_EPISODE_TITLE));
@@ -160,7 +161,9 @@ final class Refresher {
                     for (Tmdb.Title f : fresh) dup |= f.id == t.id && f.kind.equals(t.kind);
                     if (!dup) fresh.add(t);
                 }
-                for (Tmdb.Title t : fresh) items.add(fromTmdb(t, pkg, Item.HERO, 0));
+                for (Tmdb.Title t : fresh) {
+                    if (Pick.recentEnough(t.year, t.season, today.getYear())) items.add(fromTmdb(t, pkg, Item.HERO, 0));
+                }
                 for (Tmdb.Title t : tmdb.genrePool(p.getValue(), POOL_PER_GENRE)) {
                     if (!hasTitle(items, pkg, t.name)) items.add(fromTmdb(t, pkg, Item.POOL, 0));
                 }
@@ -223,7 +226,7 @@ final class Refresher {
             l.add(i);
         }
         for (List<Item> l : hero.values()) {
-            List<Item> ranked = Pick.rank(l);
+            List<Item> ranked = Pick.rankHero(l, LocalDate.now().getYear());
             for (int i = 0; i < Math.min(HERO_PER_APP, ranked.size()); i++) {
                 ranked.get(i).rowOrder = i + 1;
                 out.add(ranked.get(i));

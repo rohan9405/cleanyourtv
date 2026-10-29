@@ -75,6 +75,8 @@ final class FeedHome {
     private static final String PREFS = "feed_home";
     private static final String NETFLIX = "com.netflix.ninja";
     private static final String DRAWER = "drawer";
+    /** Continue watching titles the owner removed: {"pkg|title": {"e": last watched, "p": progress}}. */
+    private static final String REMOVED = "continue_removed";
 
     private static final int S_DRAWER = 0, S_CONTINUE = 1, S_TABS = 2, S_TAB_ROW = 3, S_GENRES = 4, S_GENRE_ROW = 5,
             S_APPS = 6;
@@ -350,9 +352,10 @@ final class FeedHome {
 
     /** The add-on published new rows, or the drawer changed. */
     void update() {
-        continueRow.setAdapter(new Tiles(feed.continueRow(), S_CONTINUE, false));
-        continueLabel.setVisibility(feed.continueRow().isEmpty() ? View.GONE : View.VISIBLE);
-        continueRow.setVisibility(feed.continueRow().isEmpty() ? View.GONE : View.VISIBLE);
+        List<Feed.Entry> cont = visibleContinue();
+        continueRow.setAdapter(new Tiles(cont, S_CONTINUE, false));
+        continueLabel.setVisibility(cont.isEmpty() ? View.GONE : View.VISIBLE);
+        continueRow.setVisibility(cont.isEmpty() ? View.GONE : View.VISIBLE);
         buildTabs();
         buildGenres();
         heroes = Feed.pickHero(feed.heroCandidates(), drawer, HERO_PER_APP, HERO_TOTAL);
@@ -372,6 +375,57 @@ final class FeedHome {
         drawerBand.getChildAt(Math.max(0, Math.min(lastDrawer, drawerBand.getChildCount() - 1))).requestFocus();
         // A tile that already had focus fires no focus change, so the page would stay where it was.
         scroll.smoothScrollTo(0, 0);
+    }
+
+    // ---- Continue watching: removed titles ---------------------------------------------------------------
+
+    private static String removedKey(Feed.Entry e) {
+        return e.pkg + "|" + e.title.toLowerCase(java.util.Locale.ROOT);
+    }
+
+    private org.json.JSONObject removed() {
+        try {
+            return new org.json.JSONObject(prefs.getString(REMOVED, "{}"));
+        } catch (org.json.JSONException e) {
+            return new org.json.JSONObject();
+        }
+    }
+
+    /**
+     * Continue watching without the titles the owner removed. A removed title that has been watched since comes back,
+     * and is forgotten, so removing it again works the same way.
+     */
+    private List<Feed.Entry> visibleContinue() {
+        org.json.JSONObject gone = removed();
+        if (gone.length() == 0) return feed.continueRow();
+        List<Feed.Entry> out = new ArrayList<>();
+        boolean changed = false;
+        for (Feed.Entry e : feed.continueRow()) {
+            org.json.JSONObject r = gone.optJSONObject(removedKey(e));
+            if (r != null && Feed.stillRemoved(r.optLong("e"), r.optInt("p", -1), e.engaged, e.progress)) continue;
+            if (r != null) {
+                gone.remove(removedKey(e));
+                changed = true;
+            }
+            out.add(e);
+        }
+        if (changed) prefs.edit().putString(REMOVED, gone.toString()).apply();
+        return out;
+    }
+
+    private void removeFromContinue(Feed.Entry e, int position) {
+        org.json.JSONObject gone = removed();
+        try {
+            gone.put(removedKey(e), new org.json.JSONObject().put("e", e.engaged).put("p", e.progress));
+        } catch (org.json.JSONException ignored) {
+            return;
+        }
+        // Keep the list small: the oldest removals go first past 200.
+        while (gone.length() > 200) gone.remove(gone.keys().next());
+        prefs.edit().putString(REMOVED, gone.toString()).apply();
+        update();
+        if (continueRow.getVisibility() == View.VISIBLE) focusRowAt(continueRow, Math.max(0, position - 1));
+        else focusDrawer();
     }
 
     // ---- sizes -------------------------------------------------------------------------------------------
@@ -818,6 +872,18 @@ final class FeedHome {
                 Feed.Entry e = list.get(pos);
                 if (!Feed.open(act, e)) Toast.makeText(act, act.getString(R.string.cant_open, e.title), Toast.LENGTH_SHORT).show();
             });
+            if (section == S_CONTINUE) {
+                // Hold OK: remove it from Continue watching until it is watched again.
+                card.setLongClickable(true);
+                card.setOnLongClickListener(v -> {
+                    int pos = h.getBindingAdapterPosition();
+                    if (pos == RecyclerView.NO_POSITION) return true;
+                    Feed.Entry e = list.get(pos);
+                    menu(e.title, new String[] {act.getString(R.string.feed_open), act.getString(R.string.feed_remove_continue)},
+                            new Runnable[] {() -> v.performClick(), () -> removeFromContinue(e, pos)});
+                    return true;
+                });
+            }
             card.setOnKeyListener((v, key, e) -> {
                 if (e.getAction() != KeyEvent.ACTION_DOWN) return false;
                 int pos = h.getBindingAdapterPosition();

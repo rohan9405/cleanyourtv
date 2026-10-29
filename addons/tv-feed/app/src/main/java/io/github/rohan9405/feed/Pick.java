@@ -88,6 +88,39 @@ final class Pick {
         return out;
     }
 
+    /**
+     * The header's order: titles first released this year, then new seasons out this year, then the rest (a film from
+     * last year that has only now come to streaming); within each, best IMDb rating, then most popular.
+     */
+    static List<Item> rankHero(List<Item> in, int thisYear) {
+        List<Item> out = new ArrayList<>(in);
+        out.sort((a, b) -> {
+            int t = Integer.compare(heroTier(a, thisYear), heroTier(b, thisYear));
+            if (t != 0) return t;
+            int r = Double.compare(b.ratingValue(), a.ratingValue());
+            return r != 0 ? r : Double.compare(b.popularity, a.popularity);
+        });
+        return out;
+    }
+
+    static int heroTier(Item i, int thisYear) {
+        if (!String.valueOf(thisYear).equals(i.year)) return 2;
+        return i.subtitle.isEmpty() ? 0 : 1;
+    }
+
+    /**
+     * Recent enough for the header: from this year or last, or a new season (its year is the season's). An older film
+     * that only has a fresh digital date in TMDB is a catalogue title, not a release.
+     */
+    static boolean recentEnough(String year, String season, int thisYear) {
+        if (season != null && !season.isEmpty()) return true;
+        try {
+            return Integer.parseInt(year) >= thisYear - 1;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
     /** Best IMDb rating first; unrated titles (often too new to have one) after them, most popular first. */
     static List<Item> rank(List<Item> in) {
         List<Item> out = new ArrayList<>(in);

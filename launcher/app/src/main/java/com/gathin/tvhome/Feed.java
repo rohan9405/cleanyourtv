@@ -42,7 +42,7 @@ final class Feed {
     /** Never in the header: its rows are videos, not releases. */
     static final String YOUTUBE = "com.google.android.youtube.tv";
     private static final String[] COLUMNS = {"row", "row_order", "title", "subtitle", "rating", "progress",
-            "poster", "backdrop", "intent", "package", "section", "tab", "overview", "kind", "year", "genre", "plain_art"};
+            "poster", "backdrop", "intent", "package", "section", "tab", "overview", "kind", "year", "genre", "plain_art", "engaged"};
 
     /** One tile. */
     static final class Entry {
@@ -51,6 +51,8 @@ final class Feed {
         final String genre;
         /** The art has no title on it (TMDB backdrops), so Home writes the title over it. */
         boolean plainArt;
+        /** Continue watching: when it was last watched (epoch ms), 0 when the app does not say. */
+        long engaged;
         final int progress, order;
 
         Entry(String section, String tab, int order, String title, String subtitle, String rating, int progress,
@@ -191,6 +193,8 @@ final class Feed {
                                 s(c, "intent"), s(c, "package"), s(c, "overview"), s(c, "kind"), s(c, "year"),
                                 s(c, "genre")));
                         entries.get(entries.size() - 1).plainArt = i(c, "plain_art") == 1;
+                        int ec = c.getColumnIndex("engaged");
+                        entries.get(entries.size() - 1).engaged = ec < 0 || c.isNull(ec) ? 0 : c.getLong(ec);
                     }
                 } catch (RuntimeException gone) {
                     return;
@@ -265,7 +269,12 @@ final class Feed {
             }
             if (!any) break;
         }
-        Collections.sort(rest, (a, b) -> Double.compare(b.ratingValue(), a.ratingValue()));
+        // The top-up prefers this year's titles too, then the best rated.
+        int thisYear = java.time.LocalDate.now().getYear();
+        Collections.sort(rest, (a, b) -> {
+            int t = Integer.compare(heroTier(a, thisYear), heroTier(b, thisYear));
+            return t != 0 ? t : Double.compare(b.ratingValue(), a.ratingValue());
+        });
         for (Entry e : rest) {
             if (out.size() >= total) break;
             out.add(e);
@@ -346,6 +355,21 @@ final class Feed {
             default:
                 return g;
         }
+    }
+
+    /** 0: first released this year; 1: a new season out this year; 2: anything older. */
+    static int heroTier(Entry e, int thisYear) {
+        if (!String.valueOf(thisYear).equals(e.year)) return 2;
+        return e.subtitle.isEmpty() ? 0 : 1;
+    }
+
+    /**
+     * A Continue watching title the owner removed stays hidden until it is watched again: a later "last watched" time
+     * than when it was removed, or, from an app that gives no time, a different position.
+     */
+    static boolean stillRemoved(long removedEngaged, int removedProgress, long engaged, int progress) {
+        if (engaged > 0 && removedEngaged > 0) return engaged <= removedEngaged;
+        return progress == removedProgress;
     }
 
     /** The art at {@code source}, decoded to about {@code widthPx}; onLoaded on the main thread, null when none. */

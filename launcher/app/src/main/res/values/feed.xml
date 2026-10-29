@@ -9,6 +9,7 @@
     <string name="feed_move" translatable="false">Move</string>
     <string name="feed_remove" translatable="false">Remove from favourites</string>
     <string name="feed_add" translatable="false">Add to favourites</string>
+    <string name="feed_remove_continue" translatable="false">Remove from Continue watching</string>
     <string name="feed_app_info" translatable="false">App info</string>
     <string name="feed_move_hint" translatable="false">Left and right to move, OK to put it down</string>
     <string name="feed_watch_on" translatable="false">▶  Watch on %1$s</string>

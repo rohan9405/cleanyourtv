@@ -97,6 +97,8 @@ final class Tmdb {
                 LocalDate premiere = date(season.optString("air_date"));
                 if (premiere != null && !premiere.isBefore(from) && !premiere.isAfter(today)) {
                     t.season = "Season " + season.optInt("season_number");
+                    // The season is what is new: its year, not the show's first ("Season 23 · 2026", not "2005").
+                    t.year = String.valueOf(premiere.getYear());
                     out.add(t);
                     break;
                 }

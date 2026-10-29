@@ -2,6 +2,7 @@ package com.gathin.tvhome;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -55,6 +56,17 @@ public class FeedTest {
         Map<String, List<Feed.Entry>> rows = Feed.genreRows(tabs, new java.util.HashMap<>(), Arrays.asList("n"), 10, 8, 1);
         assertEquals(Arrays.asList("Action"), new ArrayList<>(rows.keySet()));
         assertEquals(3, rows.get("Action").size());   // C once, though it named both
+    }
+
+    @Test
+    public void removedTitlesComeBackOnlyWhenWatchedAgain() {
+        // Removed when last watched at 1000, 40% in.
+        assertTrue(Feed.stillRemoved(1000, 40, 1000, 40));     // the same row after a restart: stays gone
+        assertFalse(Feed.stillRemoved(1000, 40, 2000, 55));    // watched again: back
+        assertTrue(Feed.stillRemoved(1000, 40, 900, 40));      // an older copy of the row: stays gone
+        // An app that gives no time: back only when the position moves.
+        assertTrue(Feed.stillRemoved(0, 40, 0, 40));
+        assertFalse(Feed.stillRemoved(0, 40, 0, 62));
     }
 
     @Test
