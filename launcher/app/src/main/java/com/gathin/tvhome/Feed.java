@@ -27,41 +27,55 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Consumer;
 
 /**
- * feed_package (config.xml or a theme): Continue watching and the apps' recommendation rows, from an add-on such as
- * Feed (addons/tv-feed). Like {@link GameDay}, the launcher only reads what the add-on publishes, art included, and
- * stays offline: posters are opened through the add-on's own provider, never fetched here.
+ * feed_package (config.xml or a theme): what Home shows besides the apps, from an add-on such as Feed
+ * (addons/tv-feed): the header's new releases, Continue watching, and each app's top 10. Like {@link GameDay}, the
+ * launcher only reads what the add-on publishes, art included, and stays offline: posters are opened through the
+ * add-on's own provider, never fetched here.
  */
 final class Feed {
     static final String META = "com.gathin.tvhome.feed";
+    static final String HERO = "hero";
+    static final String CONTINUE = "continue";
+    static final String APP = "app";
+    /** Never in the header: its rows are videos, not releases. */
+    static final String YOUTUBE = "com.google.android.youtube.tv";
     private static final String[] COLUMNS = {"row", "row_order", "title", "subtitle", "rating", "progress",
-            "poster", "backdrop", "intent", "package", "hero"};
+            "poster", "backdrop", "intent", "package", "section", "tab", "overview", "kind", "year"};
 
     /** One tile. */
     static final class Entry {
-        final String row, title, subtitle, rating, poster, backdrop, intent, pkg;
-        final int progress;
+        final String section, tab, title, subtitle, rating, poster, backdrop, intent, pkg, overview, kind, year;
+        final int progress, order;
 
-        Entry(String row, String title, String subtitle, String rating, int progress, String poster, String backdrop,
-              String intent, String pkg) {
-            this.row = row;
-            this.title = title;
-            this.subtitle = subtitle;
-            this.rating = rating;
+        Entry(String section, String tab, int order, String title, String subtitle, String rating, int progress,
+              String poster, String backdrop, String intent, String pkg, String overview, String kind, String year) {
+            this.section = section == null ? APP : section;
+            this.tab = tab == null ? "" : tab;
+            this.order = order;
+            this.title = title == null ? "" : title;
+            this.subtitle = subtitle == null ? "" : subtitle;
+            this.rating = rating == null ? "" : rating;
             this.progress = progress;
-            this.poster = poster;
-            this.backdrop = backdrop;
-            this.intent = intent;
-            this.pkg = pkg;
+            this.poster = poster == null ? "" : poster;
+            this.backdrop = backdrop == null ? "" : backdrop;
+            this.intent = intent == null ? "" : intent;
+            this.pkg = pkg == null ? "" : pkg;
+            this.overview = overview == null ? "" : overview;
+            this.kind = kind == null ? "" : kind;
+            this.year = year == null ? "" : year;
         }
-    }
 
-    static final class Row {
-        final String title;
-        final List<Entry> entries;
+        double ratingValue() {
+            try {
+                return rating.isEmpty() ? 0 : Double.parseDouble(rating);
+            } catch (NumberFormatException e) {
+                return 0;
+            }
+        }
 
-        Row(String title, List<Entry> entries) {
-            this.title = title;
-            this.entries = entries;
+        /** From TMDB rather than the app: no artwork with the title on it, so Home writes the title over it. */
+        boolean fromTmdb() {
+            return !kind.isEmpty();
         }
     }
 
@@ -73,15 +87,16 @@ final class Feed {
     private final ExecutorService io = Executors.newFixedThreadPool(2);
     private final ContentObserver observer;
     /** Decoded art, in RGB_565: a tile is about 160 KB, so this holds a screen of rows and a few backdrops. */
-    private final LruCache<String, Bitmap> art = new LruCache<String, Bitmap>(12 * 1024 * 1024) {
+    private final LruCache<String, Bitmap> art = new LruCache<String, Bitmap>(16 * 1024 * 1024) {
         @Override
         protected int sizeOf(String key, Bitmap value) {
             return value.getByteCount();
         }
     };
     private boolean watching;
-    private List<Row> rows = Collections.emptyList();
-    private List<Entry> hero = Collections.emptyList();
+    private List<Entry> continueRow = Collections.emptyList();
+    private Map<String, List<Entry>> tabs = Collections.emptyMap();
+    private Map<String, List<Entry>> hero = Collections.emptyMap();
 
     private Feed(Context ctx, String authority, Handler main, Runnable onChange) {
         this.ctx = ctx;
@@ -119,7 +134,7 @@ final class Feed {
                 ctx.getContentResolver().registerContentObserver(uri, false, observer);
                 watching = true;
             } catch (SecurityException e) {
-                // The add-on went away; the rows keep what they had.
+                // The add-on went away; Home keeps what it had.
             }
         }
         read();
@@ -136,11 +151,17 @@ final class Feed {
         art.evictAll();
     }
 
-    List<Row> rows() {
-        return rows;
+    List<Entry> continueRow() {
+        return continueRow;
     }
 
-    List<Entry> hero() {
+    /** package -> its top 10, in rank order. */
+    Map<String, List<Entry>> tabs() {
+        return tabs;
+    }
+
+    /** package -> its header candidates, best first. */
+    Map<String, List<Entry>> heroCandidates() {
         return hero;
     }
 
@@ -148,24 +169,24 @@ final class Feed {
         try {
             io.execute(() -> {
                 List<Entry> entries = new ArrayList<>();
-                List<Integer> orders = new ArrayList<>();
-                List<Boolean> heroFlags = new ArrayList<>();
                 try (Cursor c = ctx.getContentResolver().query(uri, COLUMNS, null, null, null)) {
+                    // By name: the add-on may answer with its columns in its own order, or with more of them.
                     while (c != null && c.moveToNext()) {
-                        entries.add(new Entry(c.getString(0), c.getString(2), c.getString(3), c.getString(4), c.getInt(5),
-                                c.getString(6), c.getString(7), c.getString(8), c.getString(9)));
-                        orders.add(c.getInt(1));
-                        heroFlags.add(c.getInt(10) == 1);
+                        entries.add(new Entry(s(c, "section"), s(c, "tab"), i(c, "row_order"), s(c, "title"),
+                                s(c, "subtitle"), s(c, "rating"), i(c, "progress"), s(c, "poster"), s(c, "backdrop"),
+                                s(c, "intent"), s(c, "package"), s(c, "overview"), s(c, "kind"), s(c, "year")));
                     }
                 } catch (RuntimeException gone) {
                     return;
                 }
-                List<Row> parsed = group(entries, orders);
-                List<Entry> heroes = new ArrayList<>();
-                for (int i = 0; i < entries.size(); i++) if (heroFlags.get(i)) heroes.add(entries.get(i));
+                List<Entry> cont = new ArrayList<>();
+                Map<String, List<Entry>> byTab = group(entries, APP);
+                Map<String, List<Entry>> byHero = group(entries, HERO);
+                for (Entry e : entries) if (CONTINUE.equals(e.section) && usable(e)) cont.add(e);
                 main.post(() -> {
-                    rows = parsed;
-                    hero = heroes;
+                    continueRow = cont;
+                    tabs = byTab;
+                    hero = byHero;
                     onChange.run();
                 });
             });
@@ -174,23 +195,63 @@ final class Feed {
         }
     }
 
-    /** Tiles into rows, by row order then first appearance; tiles without a title or a target are dropped. */
-    static List<Row> group(List<Entry> entries, List<Integer> orders) {
-        Map<String, List<Entry>> byTitle = new LinkedHashMap<>();
-        Map<String, Integer> order = new LinkedHashMap<>();
-        for (int i = 0; i < entries.size(); i++) {
-            Entry e = entries.get(i);
-            if (e.title == null || e.title.isEmpty() || e.intent == null || e.intent.isEmpty() || e.row == null) continue;
-            List<Entry> list = byTitle.get(e.row);
-            if (list == null) {
-                byTitle.put(e.row, list = new ArrayList<>());
-                order.put(e.row, orders.get(i));
-            }
-            list.add(e);
+    private static String s(Cursor c, String column) {
+        int i = c.getColumnIndex(column);
+        return i < 0 || c.isNull(i) ? "" : c.getString(i);
+    }
+
+    private static int i(Cursor c, String column) {
+        int i = c.getColumnIndex(column);
+        return i < 0 || c.isNull(i) ? -1 : c.getInt(i);
+    }
+
+    /** One section's tiles by app, each list in its rank order; tiles without a title or a target are dropped. */
+    static Map<String, List<Entry>> group(List<Entry> entries, String section) {
+        Map<String, List<Entry>> out = new LinkedHashMap<>();
+        for (Entry e : entries) {
+            if (!section.equals(e.section) || !usable(e) || e.tab.isEmpty()) continue;
+            List<Entry> l = out.get(e.tab);
+            if (l == null) out.put(e.tab, l = new ArrayList<>());
+            l.add(e);
         }
-        List<Row> out = new ArrayList<>();
-        for (Map.Entry<String, List<Entry>> e : byTitle.entrySet()) out.add(new Row(e.getKey(), e.getValue()));
-        Collections.sort(out, (a, b) -> Integer.compare(order.get(a.title), order.get(b.title)));
+        for (List<Entry> l : out.values()) Collections.sort(l, (a, b) -> Integer.compare(a.order, b.order));
+        return out;
+    }
+
+    private static boolean usable(Entry e) {
+        return !e.title.isEmpty() && !e.intent.isEmpty();
+    }
+
+    /**
+     * The header's rotation: up to {@code perApp} of the best from each drawer app (YouTube left out), taken in turn
+     * so the apps alternate, then topped up to {@code total} with the best-rated of what is left from those apps.
+     */
+    static List<Entry> pickHero(Map<String, List<Entry>> candidates, List<String> drawer, int perApp, int total) {
+        List<List<Entry>> firsts = new ArrayList<>();
+        List<Entry> rest = new ArrayList<>();
+        for (String pkg : drawer) {
+            if (YOUTUBE.equals(pkg)) continue;
+            List<Entry> l = candidates.get(pkg);
+            if (l == null || l.isEmpty()) continue;
+            firsts.add(l.subList(0, Math.min(perApp, l.size())));
+            rest.addAll(l.subList(Math.min(perApp, l.size()), l.size()));
+        }
+        List<Entry> out = new ArrayList<>();
+        for (int i = 0; out.size() < total; i++) {
+            boolean any = false;
+            for (List<Entry> l : firsts) {
+                if (i < l.size() && out.size() < total) {
+                    out.add(l.get(i));
+                    any = true;
+                }
+            }
+            if (!any) break;
+        }
+        Collections.sort(rest, (a, b) -> Double.compare(b.ratingValue(), a.ratingValue()));
+        for (Entry e : rest) {
+            if (out.size() >= total) break;
+            out.add(e);
+        }
         return out;
     }
 
@@ -256,7 +317,7 @@ final class Feed {
         try {
             Intent i = Intent.parseUri(e.intent, Intent.URI_INTENT_SCHEME);
             i.setSelector(null);
-            if (i.getPackage() == null && i.getComponent() == null && e.pkg != null && !e.pkg.isEmpty()) i.setPackage(e.pkg);
+            if (i.getPackage() == null && i.getComponent() == null && !e.pkg.isEmpty()) i.setPackage(e.pkg);
             String target = i.getComponent() != null ? i.getComponent().getPackageName() : i.getPackage();
             if (target != null && !target.equals(ctx.getPackageName())) {
                 i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -266,7 +327,7 @@ final class Feed {
         } catch (URISyntaxException | RuntimeException ignored) {
             // Fall through to the app's start screen.
         }
-        if (e.pkg == null || e.pkg.isEmpty()) return false;
+        if (e.pkg.isEmpty()) return false;
         Intent launch = pm.getLeanbackLaunchIntentForPackage(e.pkg);
         if (launch == null) launch = pm.getLaunchIntentForPackage(e.pkg);
         if (launch == null) return false;
