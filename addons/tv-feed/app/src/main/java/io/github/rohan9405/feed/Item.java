@@ -11,6 +11,8 @@ final class Item {
     static final String HERO = "hero";
     static final String CONTINUE = "continue";
     static final String APP = "app";
+    /** A service's titles by genre (TMDB), for Home's genre rows; not shown on their own. */
+    static final String POOL = "pool";
 
     String section = APP;
     /** The app the tile belongs to: its tab, the logo beside a header title. */

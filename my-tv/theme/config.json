@@ -19,5 +19,6 @@
   "icon_only_buttons": true,
   "focus_overshoot": false,
   "advanced_effects": true,
-  "show_greeting": false
+  "show_greeting": false,
+  "icon_only_inputs": true
 }

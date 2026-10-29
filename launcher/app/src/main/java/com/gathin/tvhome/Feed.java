@@ -37,6 +37,8 @@ final class Feed {
     static final String HERO = "hero";
     static final String CONTINUE = "continue";
     static final String APP = "app";
+    /** Each service's titles by genre: only for the genre rows. */
+    static final String POOL = "pool";
     /** Never in the header: its rows are videos, not releases. */
     static final String YOUTUBE = "com.google.android.youtube.tv";
     private static final String[] COLUMNS = {"row", "row_order", "title", "subtitle", "rating", "progress",
@@ -103,6 +105,7 @@ final class Feed {
     private List<Entry> continueRow = Collections.emptyList();
     private Map<String, List<Entry>> tabs = Collections.emptyMap();
     private Map<String, List<Entry>> hero = Collections.emptyMap();
+    private Map<String, List<Entry>> pool = Collections.emptyMap();
 
     private Feed(Context ctx, String authority, Handler main, Runnable onChange) {
         this.ctx = ctx;
@@ -166,6 +169,11 @@ final class Feed {
         return tabs;
     }
 
+    /** package -> its titles by genre, for the genre rows. */
+    Map<String, List<Entry>> pool() {
+        return pool;
+    }
+
     /** package -> its header candidates, best first. */
     Map<String, List<Entry>> heroCandidates() {
         return hero;
@@ -190,11 +198,13 @@ final class Feed {
                 List<Entry> cont = new ArrayList<>();
                 Map<String, List<Entry>> byTab = group(entries, APP);
                 Map<String, List<Entry>> byHero = group(entries, HERO);
+                Map<String, List<Entry>> byPool = group(entries, POOL);
                 for (Entry e : entries) if (CONTINUE.equals(e.section) && usable(e)) cont.add(e);
                 main.post(() -> {
                     continueRow = cont;
                     tabs = byTab;
                     hero = byHero;
+                    pool = byPool;
                     onChange.run();
                 });
             });
@@ -264,37 +274,60 @@ final class Feed {
     }
 
     /**
-     * The genre rows: the drawer apps' top 10s pooled (YouTube's videos have no genre), each title once, grouped by its
-     * genres. A genre needs {@code minTitles} titles to get a tab; the tabs go most titles first, up to
-     * {@code maxGenres}, and each row is its best-rated {@code perGenre}.
+     * The genre rows, from the drawer apps' top 10s and their genre pools (YouTube's videos have no genre), each title
+     * once. A genre needs {@code minTitles} titles to get a tab; the tabs go most titles first, up to
+     * {@code maxGenres}. Each row takes the apps in turn, in drawer order, each app's best-rated first, so one app with
+     * many titles cannot fill a row on its own.
      */
-    static Map<String, List<Entry>> genreRows(Map<String, List<Entry>> tabs, List<String> drawer, int perGenre,
-                                              int maxGenres, int minTitles) {
-        Map<String, List<Entry>> byGenre = new LinkedHashMap<>();
+    static Map<String, List<Entry>> genreRows(Map<String, List<Entry>> tabs, Map<String, List<Entry>> pool,
+                                              List<String> drawer, int perGenre, int maxGenres, int minTitles) {
+        // genre -> app -> titles
+        Map<String, Map<String, List<Entry>>> byGenre = new LinkedHashMap<>();
+        Map<String, Integer> counts = new LinkedHashMap<>();
         java.util.Set<String> seen = new java.util.HashSet<>();
         for (String pkg : drawer) {
-            List<Entry> l = tabs.get(pkg);
-            if (l == null) continue;
-            for (Entry e : l) {
+            List<Entry> all = new ArrayList<>();
+            if (tabs.get(pkg) != null) all.addAll(tabs.get(pkg));
+            if (pool.get(pkg) != null) all.addAll(pool.get(pkg));
+            for (Entry e : all) {
                 if (e.genre.isEmpty() || !seen.add(e.title.toLowerCase(java.util.Locale.ROOT))) continue;
+                java.util.Set<String> named = new java.util.HashSet<>();
                 for (String g : e.genre.split(",")) {
                     String name = genreName(g);
-                    if (name.isEmpty() || byGenre.containsKey(name) && byGenre.get(name).contains(e)) continue;
-                    List<Entry> list = byGenre.get(name);
-                    if (list == null) byGenre.put(name, list = new ArrayList<>());
+                    if (name.isEmpty() || !named.add(name)) continue;
+                    Map<String, List<Entry>> apps = byGenre.get(name);
+                    if (apps == null) byGenre.put(name, apps = new LinkedHashMap<>());
+                    List<Entry> list = apps.get(pkg);
+                    if (list == null) apps.put(pkg, list = new ArrayList<>());
                     list.add(e);
+                    counts.merge(name, 1, Integer::sum);
                 }
             }
         }
-        List<Map.Entry<String, List<Entry>>> genres = new ArrayList<>(byGenre.entrySet());
-        genres.removeIf(g -> g.getValue().size() < minTitles);
-        Collections.sort(genres, (a, b) -> Integer.compare(b.getValue().size(), a.getValue().size()));
+        List<String> names = new ArrayList<>(byGenre.keySet());
+        names.removeIf(n -> counts.get(n) < minTitles);
+        Collections.sort(names, (a, b) -> Integer.compare(counts.get(b), counts.get(a)));
         Map<String, List<Entry>> out = new LinkedHashMap<>();
-        for (Map.Entry<String, List<Entry>> g : genres) {
+        for (String name : names) {
             if (out.size() >= maxGenres) break;
-            List<Entry> l = new ArrayList<>(g.getValue());
-            Collections.sort(l, (a, b) -> Double.compare(b.ratingValue(), a.ratingValue()));
-            out.put(g.getKey(), new ArrayList<>(l.subList(0, Math.min(perGenre, l.size()))));
+            List<List<Entry>> perApp = new ArrayList<>();
+            for (List<Entry> l : byGenre.get(name).values()) {
+                List<Entry> sorted = new ArrayList<>(l);
+                Collections.sort(sorted, (a, b) -> Double.compare(b.ratingValue(), a.ratingValue()));
+                perApp.add(sorted);
+            }
+            List<Entry> row = new ArrayList<>();
+            for (int i = 0; row.size() < perGenre; i++) {
+                boolean any = false;
+                for (List<Entry> l : perApp) {
+                    if (i < l.size() && row.size() < perGenre) {
+                        row.add(l.get(i));
+                        any = true;
+                    }
+                }
+                if (!any) break;
+            }
+            out.put(name, row);
         }
         return out;
     }
