@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- feed_package (FeedView): the same in every language, so not translated. -->
+<resources>
+    <string name="feed_rating" translatable="false">★ %1$s</string>
+    <string name="feed_rating_long" translatable="false">★ IMDb %1$s</string>
+    <string name="feed_progress" translatable="false">%1$d%%</string>
+</resources>
