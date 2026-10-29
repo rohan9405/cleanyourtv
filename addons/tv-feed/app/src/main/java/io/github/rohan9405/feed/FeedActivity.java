@@ -102,7 +102,8 @@ public final class FeedActivity extends Activity {
         Map<String, int[]> rows = new LinkedHashMap<>();
         for (Item i : s.items) {
             String name = Item.CONTINUE.equals(i.section) ? "Continue watching"
-                    : (Item.HERO.equals(i.section) ? "Header, new in 10 days: " : "Top 10 tab: ") + label(pm, i.tab, false);
+                    : (Item.HERO.equals(i.section) ? "Header, new in 14 days: "
+                    : Item.POOL.equals(i.section) ? "Genre pool: " : "Top 10 tab: ") + label(pm, i.tab, false);
             int[] n = rows.get(name);
             if (n == null) rows.put(name, n = new int[2]);
             n[0]++;

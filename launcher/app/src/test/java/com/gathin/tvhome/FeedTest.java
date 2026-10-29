@@ -25,12 +25,26 @@ public class FeedTest {
         tabs.put("n", Arrays.asList(g("n", "A", "7.0", "Drama, Crime"), g("n", "B", "9.0", "Drama"), g("n", "C", "8.0", "Comedy")));
         tabs.put("p", Arrays.asList(g("p", "D", "8.5", "Drama"), g("p", "a", "6.0", "Drama"), g("p", "E", "7.5", "Comedy, Drama")));
         tabs.put("x", Arrays.asList(g("x", "F", "9.9", "Drama")));   // not in the drawer
-        Map<String, List<Feed.Entry>> rows = Feed.genreRows(tabs, Arrays.asList("n", "p"), 10, 8, 2);
+        Map<String, List<Feed.Entry>> rows = Feed.genreRows(tabs, new java.util.HashMap<>(), Arrays.asList("n", "p"), 10, 8, 2);
         assertEquals(Arrays.asList("Drama", "Comedy"), new ArrayList<>(rows.keySet()));   // Crime has 1 title: no tab
         List<Feed.Entry> drama = rows.get("Drama");
         assertEquals(4, drama.size());   // A, B, D, E: "a" is A again
-        assertEquals("B", drama.get(0).title);
-        assertEquals("D", drama.get(1).title);
+        assertEquals("B", drama.get(0).title);   // n's best
+        assertEquals("D", drama.get(1).title);   // then p's best
+        assertEquals("A", drama.get(2).title);   // then n's next
+    }
+
+    @Test
+    public void genreRowsTakeAppsInTurnFromTheirPools() {
+        Map<String, List<Feed.Entry>> pool = new java.util.LinkedHashMap<>();
+        pool.put("n", Arrays.asList(g("n", "N1", "9.0", "Sci-Fi & Fantasy"), g("n", "N2", "8.9", "Science Fiction"),
+                g("n", "N3", "8.8", "Sci-Fi")));
+        pool.put("p", Arrays.asList(g("p", "P1", "6.0", "Science Fiction")));
+        Map<String, List<Feed.Entry>> rows = Feed.genreRows(new java.util.HashMap<>(), pool, Arrays.asList("n", "p"), 10, 8, 3);
+        List<Feed.Entry> scifi = rows.get("Sci-Fi");
+        assertEquals("N1", scifi.get(0).title);
+        assertEquals("P1", scifi.get(1).title);   // the other app's turn, though its rating is lower
+        assertEquals("N2", scifi.get(2).title);
     }
 
     @Test
@@ -38,7 +52,7 @@ public class FeedTest {
         Map<String, List<Feed.Entry>> tabs = new java.util.LinkedHashMap<>();
         tabs.put("n", Arrays.asList(g("n", "A", "7.0", "Action & Adventure"), g("n", "B", "8.0", "Action"),
                 g("n", "C", "6.0", "Action, Action & Adventure")));
-        Map<String, List<Feed.Entry>> rows = Feed.genreRows(tabs, Arrays.asList("n"), 10, 8, 1);
+        Map<String, List<Feed.Entry>> rows = Feed.genreRows(tabs, new java.util.HashMap<>(), Arrays.asList("n"), 10, 8, 1);
         assertEquals(Arrays.asList("Action"), new ArrayList<>(rows.keySet()));
         assertEquals(3, rows.get("Action").size());   // C once, though it named both
     }

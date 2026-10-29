@@ -73,6 +73,7 @@ final class FeedHome {
     private static final int HERO_TOTAL = 20;
     private static final int GRID_COLUMNS = 6;
     private static final String PREFS = "feed_home";
+    private static final String NETFLIX = "com.netflix.ninja";
     private static final String DRAWER = "drawer";
 
     private static final int S_DRAWER = 0, S_CONTINUE = 1, S_TABS = 2, S_TAB_ROW = 3, S_GENRES = 4, S_GENRE_ROW = 5,
@@ -403,7 +404,8 @@ final class FeedHome {
             if (pkg.equals(act.getPackageName()) || hidden.contains(pkg) || apps.containsKey(pkg)) continue;
             Drawable banner = r.activityInfo.loadBanner(pm);
             if (banner == null) banner = r.activityInfo.applicationInfo.loadBanner(pm);
-            apps.put(pkg, new App(pkg, String.valueOf(r.loadLabel(pm)), banner, r.loadIcon(pm)));
+            Drawable icon = NETFLIX.equals(pkg) ? act.getDrawable(R.drawable.logo_netflix_n) : r.loadIcon(pm);
+            apps.put(pkg, new App(pkg, String.valueOf(r.loadLabel(pm)), banner, icon));
         }
         String saved = prefs.getString(DRAWER, null);
         List<String> want = saved == null ? defaultDrawer : Arrays.asList(TextUtils.split(saved, ","));
@@ -745,7 +747,6 @@ final class FeedHome {
             final ImageView badge = new ImageView(act);
             final View progress = new View(act);
             final View track = new View(act);
-            final TextView type = text(10, Color.WHITE, medium);
             String source = "";
 
             Holder(FrameLayout card) {
@@ -799,16 +800,6 @@ final class FeedHome {
             card.addView(h.track, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(4), Gravity.BOTTOM));
             h.progress.setBackgroundColor(0xFFE50914);
             card.addView(h.progress, new FrameLayout.LayoutParams(0, dp(4), Gravity.BOTTOM | Gravity.START));
-            h.type.setAllCaps(true);
-            h.type.setLetterSpacing(0.1f);
-            h.type.setBackground(rounded(0x99000000, dp(4)));
-            h.type.setPadding(dp(6), dp(2), dp(6), dp(2));
-            // Top right, under the IMDb tag: posters put their own title art at the bottom.
-            FrameLayout.LayoutParams yl = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.END);
-            yl.rightMargin = dp(8);
-            yl.topMargin = dp(8);
-            card.addView(h.type, yl);
 
             card.setOnFocusChangeListener((v, has) -> {
                 lift(v, has, 1.08f);
@@ -854,11 +845,6 @@ final class FeedHome {
             App a = apps.get(e.pkg);
             h.badge.setImageDrawable(a == null ? null : a.icon);
             h.badge.setVisibility(section != S_TAB_ROW && a != null ? View.VISIBLE : View.GONE);
-            String kind = kindLabel(e);
-            h.type.setText(kind);
-            h.type.setVisibility(section != S_CONTINUE && !kind.isEmpty() ? View.VISIBLE : View.GONE);
-            ((FrameLayout.LayoutParams) h.type.getLayoutParams()).topMargin = e.rating.isEmpty() ? dp(8) : dp(34);
-            h.type.requestLayout();
             boolean showProgress = e.progress > 0;
             h.track.setVisibility(showProgress ? View.VISIBLE : View.GONE);
             ViewGroup.LayoutParams plp = h.progress.getLayoutParams();
@@ -1001,6 +987,7 @@ final class FeedHome {
             return;
         }
         heroTurn = Math.floorMod(heroTurn + step, heroes.size());
+        dotStep = step;
         Feed.Entry e = heroes.get(heroTurn);
         heroBlock.animate().cancel();
         heroBlock.animate().alpha(0f).setDuration(heroBlock.getAlpha() > 0 ? 180 : 0).withEndAction(() -> {
@@ -1067,19 +1054,45 @@ final class FeedHome {
         }
     }
 
+    private int dotStep = 1;
+
+    /**
+     * Each dot grows or shrinks to its new size, and the row glides in from the side the carousel moved toward, so
+     * the pill seems to travel along it.
+     */
     private void updateDots() {
         int k = heroDots.getChildCount();
         if (k == 0) return;
+        boolean animate = heroBlock.getAlpha() > 0 && heroDots.isLaidOut();
+        if (animate && heroes.size() > 5) {
+            heroDots.setTranslationX(dotStep * dp(16));
+            heroDots.animate().translationX(0).setDuration(320).setInterpolator(new android.view.animation.DecelerateInterpolator()).start();
+        }
         // Five or more titles: the window is centred on the current one. Fewer: one dot per title.
         int current = heroes.size() > 5 ? k / 2 : heroTurn;
         for (int i = 0; i < k; i++) {
             int dist = Math.abs(i - current);
             View dot = heroDots.getChildAt(i);
             LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) dot.getLayoutParams();
-            lp.width = dist == 0 ? dp(22) : dist == 1 ? dp(8) : dp(5);
-            lp.height = dist == 0 ? dp(8) : dist == 1 ? dp(8) : dp(5);
-            dot.setLayoutParams(lp);
+            int w = dist == 0 ? dp(22) : dist == 1 ? dp(8) : dp(5);
+            int h = dist == 0 ? dp(8) : dist == 1 ? dp(8) : dp(5);
             dot.setBackground(rounded(dist == 0 ? 0xFFFFFFFF : dist == 1 ? 0xB3FFFFFF : 0x66FFFFFF, dp(4)));
+            if (!animate || (lp.width == w && lp.height == h)) {
+                lp.width = w;
+                lp.height = h;
+                dot.setLayoutParams(lp);
+                continue;
+            }
+            int w0 = lp.width, h0 = lp.height;
+            android.animation.ValueAnimator a = android.animation.ValueAnimator.ofFloat(0f, 1f).setDuration(320);
+            a.setInterpolator(new android.view.animation.DecelerateInterpolator());
+            a.addUpdateListener(an -> {
+                float f = (float) an.getAnimatedValue();
+                lp.width = Math.round(w0 + (w - w0) * f);
+                lp.height = Math.round(h0 + (h - h0) * f);
+                dot.setLayoutParams(lp);
+            });
+            a.start();
         }
     }
 
@@ -1117,23 +1130,27 @@ final class FeedHome {
         return "";
     }
 
-    /** The focused tile in words, under its row: title, type, genres, rating. */
+    /** The focused tile in words, under its row: what the tile itself does not show, its type, genres and year. */
     private String describe(Feed.Entry e) {
         List<String> parts = new ArrayList<>();
-        parts.add(e.title);
         String kind = kindLabel(e);
         if (!kind.isEmpty()) parts.add(kind);
-        if (!e.genre.isEmpty()) parts.add(e.genre);
-        if (!e.rating.isEmpty()) parts.add("IMDb " + e.rating);
-        App a = apps.get(e.pkg);
-        if (a != null) parts.add(a.label);
+        if (!e.genre.isEmpty()) {
+            List<String> names = new ArrayList<>();
+            for (String g : e.genre.split(",")) {
+                String n = Feed.genreName(g);
+                if (!n.isEmpty() && !names.contains(n)) names.add(n);
+            }
+            parts.add(TextUtils.join(", ", names));
+        }
+        if (!e.year.isEmpty()) parts.add(e.year);
         return TextUtils.join("  ·  ", parts);
     }
 
     // ---- genres ------------------------------------------------------------------------------------------
 
     private void buildGenres() {
-        genres = Feed.genreRows(feed.tabs(), drawer, GENRE_TOP, GENRE_TABS, GENRE_MIN);
+        genres = Feed.genreRows(feed.tabs(), feed.pool(), drawer, GENRE_TOP, GENRE_TABS, GENRE_MIN);
         genreNames.clear();
         genreNames.addAll(genres.keySet());
         boolean any = !genreNames.isEmpty();

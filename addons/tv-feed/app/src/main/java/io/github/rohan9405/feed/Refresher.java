@@ -38,7 +38,9 @@ final class Refresher {
     static final int TOP = 10;
     /** Header candidates kept per app, ranked: Home uses 5 and dips into the rest to fill 20. */
     private static final int HERO_PER_APP = 10;
-    private static final int RATING_BUDGET = 150;
+    private static final int RATING_BUDGET = 200;
+    /** Titles per service and genre in the genre pool. */
+    private static final int POOL_PER_GENRE = 4;
 
     private static final ExecutorService ONE = Executors.newSingleThreadExecutor();
     private static final AtomicBoolean RUNNING = new AtomicBoolean();
@@ -159,6 +161,9 @@ final class Refresher {
                     if (!dup) fresh.add(t);
                 }
                 for (Tmdb.Title t : fresh) items.add(fromTmdb(t, pkg, Item.HERO, 0));
+                for (Tmdb.Title t : tmdb.genrePool(p.getValue(), POOL_PER_GENRE)) {
+                    if (!hasTitle(items, pkg, t.name)) items.add(fromTmdb(t, pkg, Item.POOL, 0));
+                }
                 if (!published.containsKey(pkg)) {
                     List<Tmdb.Title> top = tmdb.popular(p.getValue());
                     for (int i = 0; i < Math.min(TOP, top.size()); i++) items.add(fromTmdb(top.get(i), pkg, Item.APP, i + 1));
@@ -244,6 +249,12 @@ final class Refresher {
         i.rowOrder = order;
         i.intent = Providers.launchIntent(pkg);
         return i;
+    }
+
+    /** The service already has this title in Home (its own top 10, say): the pool does not need it twice. */
+    private static boolean hasTitle(List<Item> items, String pkg, String title) {
+        for (Item i : items) if (i.pkg.equals(pkg) && i.title.equalsIgnoreCase(title)) return true;
+        return false;
     }
 
     private static boolean has(List<Item> list, String title) {

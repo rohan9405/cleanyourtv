@@ -113,11 +113,41 @@ final class Tmdb {
         }
     }
 
+    /** Home's genre tabs and TMDB's ids for them: {name, movie id, series id}; 0 where TMDB has no such genre. */
+    static final Object[][] POOL_GENRES = {
+            {"Drama", 18, 18}, {"Comedy", 35, 35}, {"Action", 28, 10759}, {"Thriller", 53, 0}, {"Crime", 80, 80},
+            {"Sci-Fi", 878, 10765}, {"Romance", 10749, 0}, {"Horror", 27, 0}, {"Mystery", 9648, 9648},
+            {"Animation", 16, 16}, {"Family", 10751, 10751}, {"Documentary", 99, 99}};
+
+    /**
+     * A service's best-known titles in each of {@link #POOL_GENRES}, {@code perGenre} each (series and films mixed),
+     * every title once: the pool Home's genre rows draw from, so every drawer app has a say in every genre.
+     */
+    List<Title> genrePool(int provider, int perGenre) {
+        genres(new JSONArray());   // load the names once, before anything else reads them
+        List<Title> out = new ArrayList<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (Object[] g : POOL_GENRES) {
+            List<Title> tv = new ArrayList<>(), movies = new ArrayList<>();
+            if ((int) g[2] > 0) add(tv, discover("tv", provider, "with_genres", String.valueOf(g[2]), "vote_count.gte", "20"), "tv");
+            if ((int) g[1] > 0) add(movies, discover("movie", provider, "with_genres", String.valueOf(g[1]), "vote_count.gte", "20"), "movie");
+            int taken = 0;
+            for (int i = 0; taken < perGenre && (i < tv.size() || i < movies.size()); i++) {
+                for (Title t : new Title[] {i < tv.size() ? tv.get(i) : null, i < movies.size() ? movies.get(i) : null}) {
+                    if (t == null || taken >= perGenre) continue;
+                    if (seen.add(t.kind + t.id)) out.add(t);
+                    taken++;
+                }
+            }
+        }
+        return out;
+    }
+
     /** TMDB genre id -> name, movies and series together; empty when TMDB cannot be reached. */
     private java.util.Map<Integer, String> genreNames;
 
     private String genres(JSONArray ids) {
-        if (ids == null || ids.length() == 0) return "";
+        if (ids == null) return "";
         if (genreNames == null) {
             genreNames = new java.util.HashMap<>();
             for (String kind : new String[] {"movie", "tv"}) {
@@ -129,6 +159,7 @@ final class Tmdb {
                 }
             }
         }
+        if (ids.length() == 0) return "";
         List<String> names = new ArrayList<>();
         for (int i = 0; i < ids.length() && names.size() < 3; i++) {
             String n = genreNames.get(ids.optInt(i));
