@@ -41,6 +41,19 @@ my-tv/api-keys.sh save tmdb
 TV_HOST=<tv ip> my-tv/api-keys.sh send       # after installing the Feed add-on (--emulator for the preview)
 ```
 
+## Home, top to bottom
+
+| Part | What it is |
+|---|---|
+| Header | New in the last 10 days on the drawer's services (TMDB), best IMDb rating first: 5 per app, up to 20, turning every 8 s. YouTube is left out. |
+| Drawer | Your favourite apps on one line, shrinking to fit. Hold OK on one: Open, Move, Remove from favourites, App info. Hold OK on any app under Apps: Add to favourites. |
+| Continue watching | From the apps that publish it (Prime Video, JioHotstar, Netflix, Airtel, Apple TV). |
+| Top 10 | A tab per drawer app; Left and Right change the row. Netflix and SonyLIV publish nothing, so theirs come from TMDB's most popular in India. |
+| Apps | Everything else. |
+
+Ratings come through the StreamRatings shared cache (the browser extension's), refreshed 3 to 30 days by age.
+The Bluetooth button next to Wi-Fi opens the Bluetooth settings.
+
 ## What was applied (29 Oct 2026)
 
 - `my-tv/debloat.txt` with `tools/disable.sh`: the BF1 list, all four preloaded apps off, voice search kept.
