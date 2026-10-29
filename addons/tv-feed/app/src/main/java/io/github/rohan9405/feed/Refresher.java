@@ -1,15 +1,14 @@
 package io.github.rohan9405.feed;
 
-
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.media.tv.TvContract;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -21,19 +20,27 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Reads Continue watching (Watch Next) and the apps' recommendation channels from the TV provider, looks up
- * ratings, caches the art, and stores the result. Runs only when Home asks and the last refresh is stale, or when
- * the Feed screen says Refresh: no background service, no alarms.
+ * Builds Home's three sections and stores them:
+ * <ul>
+ *   <li><b>continue</b>: Continue watching (Watch Next) from the TV provider, browsers left out;</li>
+ *   <li><b>app</b>: each app's top 10, from the rows it publishes, or from TMDB's most popular on that service in
+ *       India when it publishes none (Netflix, SonyLIV);</li>
+ *   <li><b>hero</b>: for each streaming service, the titles new in the last 10 days (TMDB), best IMDb rating first.
+ *       Home picks 5 per drawer app from these and tops up to 20.</li>
+ * </ul>
+ * Runs only when Home asks and the last refresh is stale, or when the Feed screen says Refresh: no background service.
  */
 final class Refresher {
     /** Not in the SDK as a constant: TvProvider defines it (docs/watch-next.md). */
     static final String READ_TV = "android.permission.READ_TV_LISTINGS";
     static final long STALE_MS = 20L * 60 * 1000;
     private static final int MAX_CONTINUE = 20;
-    private static final int MAX_CHANNELS = 6;
-    private static final int MAX_PER_CHANNEL = 15;
-    private static final int MAX_HERO = 8;
-    private static final int RATING_BUDGET = 60;
+    static final int TOP = 10;
+    /** Header candidates kept per app, ranked: Home uses 5 and dips into the rest to fill 20. */
+    private static final int HERO_PER_APP = 10;
+    /** Below this many premieres, a service's series with new episodes count too. */
+    private static final int HERO_MIN_NEW = 5;
+    private static final int RATING_BUDGET = 150;
 
     private static final ExecutorService ONE = Executors.newSingleThreadExecutor();
     private static final AtomicBoolean RUNNING = new AtomicBoolean();
@@ -63,13 +70,14 @@ final class Refresher {
     private static Store.Snapshot run(Context ctx) {
         long now = System.currentTimeMillis();
         if (Demo.on(ctx)) return Demo.snapshot(ctx);
-        if (ctx.checkSelfPermission(Refresher.READ_TV) != PackageManager.PERMISSION_GRANTED) {
+        if (ctx.checkSelfPermission(READ_TV) != PackageManager.PERMISSION_GRANTED) {
             return new Store.Snapshot(now, "READ_TV_LISTINGS is not granted", Collections.emptyList(), Collections.emptyMap());
         }
         ContentResolver cr = ctx.getContentResolver();
+        PackageManager pm = ctx.getPackageManager();
         Map<String, int[]> probe = new LinkedHashMap<>();
         List<Item> items = new ArrayList<>();
-        String error = "";
+        StringBuilder error = new StringBuilder();
         String continueRow = ctx.getString(R.string.continue_watching);
 
         // Continue watching, most recently watched first.
@@ -79,14 +87,16 @@ final class Refresher {
             while (c != null && c.moveToNext()) {
                 String pkg = str(c, TvContract.WatchNextPrograms.COLUMN_PACKAGE_NAME);
                 count(probe, pkg, 0);
+                if (Providers.browser(pkg)) continue;
                 int progress = Pick.progress(lng(c, TvContract.WatchNextPrograms.COLUMN_LAST_PLAYBACK_POSITION_MILLIS),
                         lng(c, TvContract.WatchNextPrograms.COLUMN_DURATION_MILLIS));
                 long engaged = lng(c, TvContract.WatchNextPrograms.COLUMN_LAST_ENGAGEMENT_TIME_UTC_MILLIS);
                 if (!Pick.keepContinue(engaged, now, progress)) continue;
                 Item i = program(c, pkg);
                 if (i == null) continue;
+                i.section = Item.CONTINUE;
+                i.tab = pkg;
                 i.row = continueRow;
-                i.rowOrder = 0;
                 i.progress = progress;
                 i.subtitle = Pick.subtitle(str(c, TvContract.WatchNextPrograms.COLUMN_SEASON_DISPLAY_NUMBER),
                         str(c, TvContract.WatchNextPrograms.COLUMN_EPISODE_DISPLAY_NUMBER),
@@ -95,76 +105,76 @@ final class Refresher {
                 cont.add(i);
             }
         } catch (RuntimeException e) {
-            error = "Watch Next: " + e.getClass().getSimpleName();
+            error.append("Watch Next: ").append(e.getClass().getSimpleName()).append(". ");
         }
         Collections.sort(order, (a, b) -> Long.compare(b[0], a[0]));
-        List<Item> sorted = new ArrayList<>();
         for (long[] o : order) {
-            if (sorted.size() < MAX_CONTINUE) sorted.add(cont.get((int) o[1]));
+            if (items.size() < MAX_CONTINUE) items.add(cont.get((int) o[1]));
         }
-        items.addAll(sorted);
 
-        // The apps' channels ("YouTube · Recommended for you"), in the provider's order.
-        Map<Long, String> channelNames = new HashMap<>();
-        Map<Long, String> channelPkgs = new HashMap<>();
+        // Each app's own recommendations, the first ten it publishes across its channels.
+        Set<Long> previewChannels = new HashSet<>();
         try (Cursor c = cr.query(TvContract.Channels.CONTENT_URI, null, null, null, null)) {
             while (c != null && c.moveToNext()) {
-                long id = lng(c, TvContract.Channels._ID);
-                String type = str(c, TvContract.Channels.COLUMN_TYPE);
-                if (!TvContract.Channels.TYPE_PREVIEW.equals(type)) continue;
-                String pkg = str(c, TvContract.Channels.COLUMN_PACKAGE_NAME);
-                count(probe, pkg, 2);
-                channelNames.put(id, str(c, TvContract.Channels.COLUMN_DISPLAY_NAME));
-                channelPkgs.put(id, pkg);
+                if (!TvContract.Channels.TYPE_PREVIEW.equals(str(c, TvContract.Channels.COLUMN_TYPE))) continue;
+                count(probe, str(c, TvContract.Channels.COLUMN_PACKAGE_NAME), 2);
+                previewChannels.add(lng(c, TvContract.Channels._ID));
             }
         } catch (RuntimeException e) {
-            error = (error.isEmpty() ? "" : error + "; ") + "Channels: " + e.getClass().getSimpleName();
+            error.append("Channels: ").append(e.getClass().getSimpleName()).append(". ");
         }
-        Map<Long, List<Item>> byChannel = new LinkedHashMap<>();
+        Map<String, List<Item>> published = new LinkedHashMap<>();
         try (Cursor c = cr.query(TvContract.PreviewPrograms.CONTENT_URI, null, null, null, null)) {
             while (c != null && c.moveToNext()) {
                 String pkg = str(c, TvContract.PreviewPrograms.COLUMN_PACKAGE_NAME);
                 count(probe, pkg, 1);
-                long channel = lng(c, TvContract.PreviewPrograms.COLUMN_CHANNEL_ID);
-                List<Item> list = byChannel.get(channel);
-                if (list == null) byChannel.put(channel, list = new ArrayList<>());
-                if (list.size() >= MAX_PER_CHANNEL) continue;
+                if (Providers.browser(pkg) || pkg.isEmpty()) continue;
+                List<Item> list = published.get(pkg);
+                if (list == null) published.put(pkg, list = new ArrayList<>());
+                if (list.size() >= TOP) continue;
                 Item i = program(c, pkg);
-                if (i != null) list.add(i);
+                if (i == null || has(list, i.title)) continue;
+                i.section = Item.APP;
+                i.tab = pkg;
+                i.rowOrder = list.size() + 1;
+                list.add(i);
             }
         } catch (RuntimeException e) {
-            error = (error.isEmpty() ? "" : error + "; ") + "Preview: " + e.getClass().getSimpleName();
+            error.append("Preview: ").append(e.getClass().getSimpleName()).append(". ");
         }
-        PackageManager pm = ctx.getPackageManager();
-        List<List<Item>> heroLists = new ArrayList<>();
-        heroLists.add(sorted.subList(0, Math.min(3, sorted.size())));
-        int rowOrder = 1;
-        for (Map.Entry<Long, List<Item>> e : byChannel.entrySet()) {
-            if (rowOrder > MAX_CHANNELS || e.getValue().isEmpty()) continue;
-            String pkg = channelPkgs.get(e.getKey());
-            String name = channelNames.get(e.getKey());
-            String row = rowTitle(appLabel(pm, pkg != null ? pkg : e.getValue().get(0).pkg), name);
-            for (Item i : e.getValue()) {
-                i.row = row;
-                i.rowOrder = rowOrder;
-            }
-            items.addAll(e.getValue());
-            heroLists.add(e.getValue().subList(0, Math.min(2, e.getValue().size())));
-            rowOrder++;
-        }
-        for (Item i : Pick.interleave(heroLists, MAX_HERO)) i.hero = true;
+        for (List<Item> l : published.values()) items.addAll(l);
 
-        // Ratings, then art, a few at a time.
+        // TMDB: the header's new releases for every service installed here, and a top 10 for the ones that publish none.
+        Tmdb tmdb = new Tmdb(ctx);
+        if (tmdb.usable()) {
+            LocalDate today = LocalDate.now();
+            for (Map.Entry<String, Integer> p : Providers.TMDB.entrySet()) {
+                String pkg = p.getKey();
+                if (!installed(pm, pkg)) continue;
+                List<Tmdb.Title> fresh = tmdb.newReleases(p.getValue(), today);
+                if (fresh.size() < HERO_MIN_NEW) fresh.addAll(tmdb.airing(p.getValue(), today));
+                for (Tmdb.Title t : fresh) items.add(fromTmdb(t, pkg, Item.HERO, 0));
+                if (!published.containsKey(pkg)) {
+                    List<Tmdb.Title> top = tmdb.popular(p.getValue());
+                    for (int i = 0; i < Math.min(TOP, top.size()); i++) items.add(fromTmdb(top.get(i), pkg, Item.APP, i + 1));
+                }
+            }
+        } else {
+            error.append("No TMDB token: the header has no new releases. ");
+        }
+
+        // Ratings (the StreamRatings cache), then the header's ranking, then art.
         Omdb omdb = new Omdb(ctx, RATING_BUDGET);
         for (Item i : items) {
             if (Pick.rateable(i.pkg)) i.rating = omdb.rating(i.title, i.year);
         }
+        items = keepHeroTop(items);
         ExecutorService pool = Executors.newFixedThreadPool(4);
         List<Future<?>> jobs = new ArrayList<>();
         for (Item i : items) {
             jobs.add(pool.submit(() -> {
-                i.poster = Images.cache(ctx, i.posterSource, false);
-                if (i.hero) i.backdrop = Images.cache(ctx, i.posterSource, true);
+                if (Item.HERO.equals(i.section)) i.backdrop = Images.cache(ctx, i.posterSource, true);
+                else i.poster = Images.cache(ctx, i.posterSource, false);
             }));
         }
         for (Future<?> f : jobs) {
@@ -181,7 +191,59 @@ final class Refresher {
             keep.add(i.backdrop);
         }
         Images.prune(ctx, keep);
-        return new Store.Snapshot(now, error, items, probe);
+        return new Store.Snapshot(now, error.toString().trim(), items, probe);
+    }
+
+    /** The header candidates ranked per app (best IMDb rating, then most popular), {@value #HERO_PER_APP} each. */
+    static List<Item> keepHeroTop(List<Item> items) {
+        Map<String, List<Item>> hero = new LinkedHashMap<>();
+        List<Item> out = new ArrayList<>();
+        for (Item i : items) {
+            if (!Item.HERO.equals(i.section)) {
+                out.add(i);
+                continue;
+            }
+            List<Item> l = hero.get(i.tab);
+            if (l == null) hero.put(i.tab, l = new ArrayList<>());
+            l.add(i);
+        }
+        for (List<Item> l : hero.values()) {
+            List<Item> ranked = Pick.rank(l);
+            for (int i = 0; i < Math.min(HERO_PER_APP, ranked.size()); i++) {
+                ranked.get(i).rowOrder = i + 1;
+                out.add(ranked.get(i));
+            }
+        }
+        return out;
+    }
+
+    private static Item fromTmdb(Tmdb.Title t, String pkg, String section, int order) {
+        Item i = new Item();
+        i.section = section;
+        i.tab = pkg;
+        i.pkg = pkg;
+        i.title = t.name;
+        i.year = t.year;
+        i.kind = t.kind;
+        i.overview = t.overview;
+        i.posterSource = t.backdrop;
+        i.popularity = t.popularity;
+        i.rowOrder = order;
+        i.intent = Providers.launchIntent(pkg);
+        return i;
+    }
+
+    private static boolean has(List<Item> list, String title) {
+        for (Item i : list) if (i.title.equalsIgnoreCase(title)) return true;
+        return false;
+    }
+
+    private static boolean installed(PackageManager pm, String pkg) {
+        try {
+            return pm.getApplicationInfo(pkg, 0).enabled;
+        } catch (PackageManager.NameNotFoundException e) {
+            return false;
+        }
     }
 
     /** The parts every program row shares; null for a row without a title or a way to open it. */
@@ -194,24 +256,10 @@ final class Refresher {
         i.intent = intent;
         i.pkg = pkg;
         i.year = Pick.year(str(c, TvContract.PreviewPrograms.COLUMN_RELEASE_DATE));
+        i.overview = str(c, TvContract.PreviewPrograms.COLUMN_SHORT_DESCRIPTION);
         String poster = str(c, TvContract.PreviewPrograms.COLUMN_POSTER_ART_URI);
         i.posterSource = !poster.isEmpty() ? poster : str(c, TvContract.PreviewPrograms.COLUMN_THUMBNAIL_URI);
         return i;
-    }
-
-    static String rowTitle(String app, String channel) {
-        if (channel == null || channel.isEmpty()) return app;
-        if (app.isEmpty() || channel.toLowerCase().contains(app.toLowerCase())) return channel;
-        return app + " · " + channel;
-    }
-
-    private static String appLabel(PackageManager pm, String pkg) {
-        if (pkg == null) return "";
-        try {
-            return pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString();
-        } catch (PackageManager.NameNotFoundException e) {
-            return pkg;
-        }
     }
 
     private static void count(Map<String, int[]> probe, String pkg, int column) {

@@ -1,4 +1,4 @@
-# Sony BRAVIA BF1, this TV: examples/sony-bravia-bf1/debloat.txt with the ambient screensaver applied (Clock instead).
+# Sony BRAVIA BF1, this TV: examples/sony-bravia-bf1/debloat.txt as applied; the ambient screensaver is kept.
 # Android 12 (Google TV, API 31), firmware STT2.230811.001, security patch 2026-02-05
 #
 # Apply:   TV_HOST=<tv ip> tools/disable.sh examples/sony-bravia-bf1/debloat.txt
@@ -57,7 +57,7 @@ com.sonypicturescore            # Sony Pictures Core
 # ambient screensaver: shows "Unable to load content" once launcherx is off. First point the
 # screensaver at the launcher's clock, then disable it:
 #   settings put secure screensaver_components com.gathin.tvhome/.ClockDream
-com.google.android.apps.tv.dreamx     # ambient mode + smart-home panel (59 MB, always running)
+# com.google.android.apps.tv.dreamx   # ambient mode: kept on this TV, it still loads its photos with launcherx off
 
 # voice search (optional, NOT applied on the tested TV): removes the remote's mic button and the
 # on-screen search box. Frees ~115 MB (katniss runs two processes).
