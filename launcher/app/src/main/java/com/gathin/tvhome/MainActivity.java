@@ -2417,6 +2417,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private void onFeedChanged() {
         if (feedView == null) return;
         feedView.update();
+        // The rows sit where the app's name would go. Hide the name outright: at boot it can fade in before the rows
+        // arrive, and alpha alone loses to that animation.
+        hero.animate().cancel();
+        if (hero.getVisibility() != View.GONE) hero.setVisibility(feedView.hasRows() ? View.INVISIBLE : View.VISIBLE);
         // The rows above the dock came, went or changed height: put the highlight back on the focused tile.
         if (grid.hasFocus()) grid.post(() -> focusTile(lastFocused));
     }
