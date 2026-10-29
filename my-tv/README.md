@@ -20,7 +20,9 @@ Demo rows on or off (off reads the apps' real rows):
 ## On the TV
 
 Build tools: `export JAVA_HOME=~/.cleantv-toolchain/jdk/Contents/Home ANDROID_HOME=~/.cleantv-toolchain/sdk`.
-Leave the stock launcher enabled (`STOCK_LAUNCHER=none`) so the Original Home card can open it.
+On this TV Google TV keeps the Home button while its launcher is enabled, even with the setup wizard off, so the
+launcher is disabled after the hand-over (the examples list's steps) and the Original Home card can't open it;
+`tools/switch-home.sh stock` brings it back.
 
 ```bash
 TV_HOST=<tv ip> STOCK_LAUNCHER=none launcher/build-and-install.sh
@@ -38,10 +40,16 @@ my-tv/omdb-key.sh save                        # once: paste the key (hidden), ch
 TV_HOST=<tv ip> my-tv/omdb-key.sh send        # after installing the Feed add-on (--emulator for the preview)
 ```
 
+## What was applied (29 Oct 2026)
+
+- `my-tv/debloat.txt` with `tools/disable.sh`: the BF1 list, all four preloaded apps off, voice search kept, and the
+  ambient screensaver off with the screensaver set to the launcher's Clock first.
+- By hand, after the launcher was installed: setup wizard and Google TV launcher disabled, Home set to CleanYourTV.
+- Private DNS `dns.adguard-dns.com` (it was automatic). It does not block YouTube ads.
+
 ## Switching back
 
 | What | How |
 |---|---|
-| Look at the TV's own home once | The **Original Home** card. Home on the remote comes back here. |
 | Make the TV's own home the default | `TV_HOST=<tv ip> tools/switch-home.sh stock` (`clean` switches back) |
-| Undo everything, debloat included | `TV_HOST=<tv ip> tools/restore.sh examples/sony-bravia-bf1/debloat.txt com.google.android.apps.tv.launcherx` |
+| Undo everything: apps, Google TV home, screensaver, DNS | `TV_HOST=<tv ip> my-tv/restore.sh` |
