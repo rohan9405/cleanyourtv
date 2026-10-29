@@ -445,6 +445,11 @@
          online. A theme can set "game_day". -->
     <string name="game_day" translatable="false"></string>
 
+    <!-- Poster rows on Home: Continue watching and the apps' recommendation rows, with a poster backdrop behind the
+         clock, from an add-on that publishes them (the Feed add-on: io.github.rohan9405.feed; addons/tv-feed). Empty = off.
+         The launcher only reads what the add-on publishes and never goes online. A theme can set "feed_package". -->
+    <string name="feed_package" translatable="false"></string>
+
     <!-- Time-of-day backdrop behind everything: a dark gradient that follows the clock, with a warm
          horizon glow around sunrise and sunset. 0 keeps the plain background (the default); 1 to 100
          sets its opacity. Around 60 reads clearly without hiding a wallpaper. Can also be set with

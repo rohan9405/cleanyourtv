@@ -195,6 +195,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private TextView raceKicker, raceHeadline, raceSessions;
     /** game_day: each team's next game from an add-on, rotating in the race panel; null when the key is off. */
     private GameDay gameDay;
+    /** feed_package: Continue watching and the apps' rows over the dock (Feed, FeedView); null when off. */
+    private Feed feed;
+    private FeedView feedView;
     private View raceBar;
     private LinearLayout racePager;
     private long rotationStart;
@@ -538,6 +541,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         raceBar = findViewById(R.id.raceBar);
         racePager = findViewById(R.id.racePager);
         gameDay = GameDay.create(this, cfg.gameDay, handler, this::updatePanel);
+        feed = Feed.create(this, cfg.feedPackage, handler, this::onFeedChanged);
+        if (feed != null) {
+            feedView = new FeedView(this, feed, feedHost, handler, findViewById(R.id.feed),
+                    findViewById(R.id.feedBackdrop), findViewById(R.id.feedScrim));
+        }
         // The rotation runs on the clock that never jumps: setting the TV's time must not stall or stretch a turn.
         rotationStart = SystemClock.elapsedRealtime();
         showStats = cfg.showStats;
@@ -852,6 +860,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP) return true;
             if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                if (feedView != null && feedView.hasRows()) {
+                    feedView.focusRow(feedView.currentRow());
+                    return true;
+                }
                 // Back to the dock tile Up came from, not wherever the focus finder lands.
                 focusTile(singleRow ? lastFocused : lastFocused % COLUMNS);
                 return true;
@@ -1056,6 +1068,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         if (showStats) startStats();
         if (gameDay != null) gameDay.start();
+        if (feed != null) {
+            feed.start();
+            feedView.start();
+        }
         sky.update();
         wallpaperPlayer.start();
         handler.postDelayed(minuteTick, MINUTE_MS);
@@ -1237,6 +1253,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         startPending = null;   // leaving Home before the network came back: the boot's app stays closed
         stopStats();
         if (gameDay != null) gameDay.stop();
+        if (feed != null) {
+            feed.stop();
+            feedView.stop();
+        }
         handler.removeCallbacks(turnTick);
         if (lamp != null) lamp.stop();
         cancelPendingFocusScroll();
@@ -1292,6 +1312,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     protected void onDestroy() {
         super.onDestroy();
         if (gameDay != null) gameDay.shutdown();
+        if (feed != null) feed.shutdown();
         unregisterReceiver(packageReceiver);
         wallpaperPlayer.close();
         ConnectivityManager cm = getSystemService(ConnectivityManager.class);
@@ -1704,6 +1725,17 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     public void onTileFocused(int position, View card) {
         lastFocused = position;
         lastFocusedKey = adapter.keyAt(position);
+        if (feedView != null) {
+            // The dock keeps one poster row above it; deeper in the grid the rows make way. A change moves the tile,
+            // so place the highlight once the new layout is done.
+            boolean moved = singleRow || position < COLUMNS ? feedView.peek() : feedView.collapse();
+            if (moved) {
+                card.post(() -> {
+                    if (card.isFocused()) onTileFocused(position, card);
+                });
+                return;
+            }
+        }
         // Focus restored before the first layout (cold start): the tile has no size yet, and the glass
         // would be sized to 2*pad. Run again once the tile is laid out.
         if (card.getWidth() == 0) {
@@ -1802,6 +1834,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     // ---- top shelf -------------------------------------------------------------------------------
 
     private void showHero(int position, float dockTopInRoot) {
+        if (feedView != null && feedView.hasRows()) {
+            // The poster rows sit where the app's name would go; the title line above them names the poster instead.
+            hero.animate().cancel();
+            hero.setAlpha(0f);
+            heroShown = true;
+            return;
+        }
         String label = adapter.labelAt(position);
         int color = adapter.ambientColorAt(position);
         float y = dockTopInRoot - 14 * density - 26 * density - hero.getHeight();
@@ -2327,7 +2366,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (singleRow) {
             // One row: Up leaves for the top bar, Down has nowhere to go, and Left/Right walk the whole row,
             // stopping at its two ends (the default focus search scrolls the row to the next tile).
-            if (keyCode == KeyEvent.KEYCODE_DPAD_UP) return false;
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP) return feedUp();
             if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) return true;
             boolean forward = rtlAppGrid ? keyCode == KeyEvent.KEYCODE_DPAD_LEFT : keyCode == KeyEvent.KEYCODE_DPAD_RIGHT;
             int last = adapter.focusablePosition(count - 1);
@@ -2351,7 +2390,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     rtlAppGrid, keyCode == KeyEvent.KEYCODE_DPAD_LEFT);
         }
         if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-            if (position < COLUMNS) return false;          // dock row: let focus move to the top bar
+            if (position < COLUMNS) return feedUp();        // dock row: to the poster rows, else the top bar
             target = position - COLUMNS;
         } else {
             int lastRowStart = ((count - 1) / COLUMNS) * COLUMNS;
@@ -2367,6 +2406,38 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 ? SoundEffectConstants.NAVIGATION_UP : SoundEffectConstants.NAVIGATION_DOWN);
         return true;
     }
+
+    /** Up from the dock: into the poster rows when there are any. False lets the focus go on to the top bar. */
+    private boolean feedUp() {
+        if (feedView == null || !feedView.hasRows()) return false;
+        feedView.focusRow(feedView.currentRow());
+        return true;
+    }
+
+    private void onFeedChanged() {
+        if (feedView == null) return;
+        feedView.update();
+        // The rows above the dock came, went or changed height: put the highlight back on the focused tile.
+        if (grid.hasFocus()) grid.post(() -> focusTile(lastFocused));
+    }
+
+    private final FeedView.Host feedHost = new FeedView.Host() {
+        @Override
+        public void onFeedFocused() {
+            hideGlass();
+            hideHero();
+        }
+
+        @Override
+        public void onFeedUp() {
+            (btnInputs.getVisibility() == View.VISIBLE ? btnInputs : firstTopButton()).requestFocus();
+        }
+
+        @Override
+        public void onFeedDown() {
+            focusTile(singleRow ? lastFocused : lastFocused % COLUMNS);
+        }
+    };
 
     @Override public void onLibraryFocused() {
         libraryFocusPending = false;
