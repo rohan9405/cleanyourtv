@@ -34,6 +34,16 @@ public class FeedTest {
     }
 
     @Test
+    public void pairedGenresMergeIntoOne() {
+        Map<String, List<Feed.Entry>> tabs = new java.util.LinkedHashMap<>();
+        tabs.put("n", Arrays.asList(g("n", "A", "7.0", "Action & Adventure"), g("n", "B", "8.0", "Action"),
+                g("n", "C", "6.0", "Action, Action & Adventure")));
+        Map<String, List<Feed.Entry>> rows = Feed.genreRows(tabs, Arrays.asList("n"), 10, 8, 1);
+        assertEquals(Arrays.asList("Action"), new ArrayList<>(rows.keySet()));
+        assertEquals(3, rows.get("Action").size());   // C once, though it named both
+    }
+
+    @Test
     public void tabsKeepRankOrderAndDropUnusable() {
         List<Feed.Entry> in = Arrays.asList(e(Feed.APP, "p", 2, "two", ""), e(Feed.APP, "p", 1, "one", ""),
                 e(Feed.APP, "p", 3, "", ""), e(Feed.CONTINUE, "p", 0, "cont", ""), e(Feed.APP, "", 1, "noTab", ""));
