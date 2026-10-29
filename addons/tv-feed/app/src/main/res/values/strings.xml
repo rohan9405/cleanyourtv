@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Feed</string>
+    <string name="continue_watching">Continue watching</string>
+    <string name="refresh">Refresh now</string>
+    <string name="save_key">Save OMDb key</string>
+    <string name="omdb_hint">OMDb API key (free at omdbapi.com) for IMDb ratings</string>
+    <string name="grant">Allow reading TV rows</string>
+</resources>
