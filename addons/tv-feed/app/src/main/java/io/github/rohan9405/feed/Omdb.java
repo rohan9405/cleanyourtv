@@ -12,10 +12,11 @@ import java.time.LocalDate;
 import java.util.Locale;
 
 /**
- * IMDb ratings through OMDb (omdbapi.com; IMDb has no free API). A free key allows 1,000 lookups a day. Every answer
- * is cached with the title's year and release date, and stays fresh as long as {@link CachePolicy} says (3 to 30
- * days by age, as in StreamRatings), so a refresh asks only for titles that are new or due. When OMDb cannot be
- * reached, or the refresh's budget is spent, the last rating known is shown rather than none.
+ * IMDb ratings, looked up the way the StreamRatings extension does: this TV's own cache, then the StreamRatings shared
+ * cache that the extension uses too, then OMDb directly while the shared cache is down (omdbapi.com; IMDb has no free
+ * API, and a free key allows 1,000 lookups a day). Every answer is kept with the title's year and release date, and
+ * stays fresh as long as {@link CachePolicy} says (3 to 30 days by age), so a refresh asks only for titles that are
+ * new or due. When nothing can be reached, or the refresh's budget is spent, the last rating known is shown.
  */
 final class Omdb {
     static final String PREFS = "omdb";
@@ -99,8 +100,19 @@ final class Omdb {
         return fetched.rating;
     }
 
-    /** Null on a network error. A year that finds nothing is retried without it. */
+    /**
+     * The StreamRatings order: the shared cache first, which answers from ratings any user fetched and otherwise asks
+     * OMDb with this key and keeps the answer for everyone; OMDb directly only while the shared cache is down. Null
+     * on a network error, or when the key or its daily limit was refused (never cached).
+     */
     private Entry fetch(String title, String year, long now) {
+        try {
+            return shared(title, year);
+        } catch (SharedCacheDown down) {
+            // Fall through to OMDb.
+        } catch (Exception refused) {
+            return null;
+        }
         try {
             Entry e = query(title, year, now);
             if (!e.found && !year.isEmpty()) e = query(title, "", now);
@@ -108,6 +120,52 @@ final class Omdb {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    /** The StreamRatings shared cache (worker/README.md in StreamRatings); the extension uses the same URL. */
+    static final String SHARED_CACHE_URL = "https://streamratings-cache.rohan-trades-trump.workers.dev";
+
+    static final class SharedCacheDown extends Exception {
+        SharedCacheDown(String message) {
+            super(message);
+        }
+    }
+
+    private Entry shared(String title, String year) throws Exception {
+        Uri.Builder b = Uri.parse(SHARED_CACHE_URL + "/v1/rating").buildUpon().appendQueryParameter("title", title);
+        if (!year.isEmpty()) b.appendQueryParameter("year", year);
+        Net.Response r;
+        try {
+            r = Net.request(b.build().toString(), "X-OMDb-Key", apiKey, 64 * 1024);
+        } catch (java.io.IOException e) {
+            throw new SharedCacheDown(e.getMessage());
+        }
+        return parseShared(r.code, r.body);
+    }
+
+    /**
+     * {@code {"data":{"found":true,"year":"2020–","released":"05 Mar 2020","imdbRating":"9.0",...},"ts":...}}. The
+     * entry keeps the cache's ts, when OMDb was asked, so its freshness matches what every other user sees. A 4xx
+     * with an error is OMDb refusing this key or its limit; anything else means the cache is down.
+     */
+    static Entry parseShared(int code, String body) throws Exception {
+        JSONObject o;
+        try {
+            o = new JSONObject(body);
+        } catch (JSONException e) {
+            o = null;
+        }
+        JSONObject data = o == null ? null : o.optJSONObject("data");
+        if (code / 100 == 2 && data != null) {
+            boolean found = data.optBoolean("found");
+            String rating = data.isNull("imdbRating") ? "" : data.optString("imdbRating");
+            return new Entry(found, rating.matches("\\d(\\.\\d)?|10(\\.0)?") ? rating : "",
+                    data.isNull("year") ? "" : data.optString("year"),
+                    data.isNull("released") ? "" : data.optString("released"),
+                    o.optLong("ts", System.currentTimeMillis()));
+        }
+        if (code >= 400 && code < 500 && o != null && o.has("error")) throw new IllegalStateException(o.optString("error"));
+        throw new SharedCacheDown("HTTP " + code);
     }
 
     private Entry query(String title, String year, long now) throws Exception {
