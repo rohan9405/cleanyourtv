@@ -75,7 +75,9 @@ final class FeedHome {
     private static final String PREFS = "feed_home";
     private static final String DRAWER = "drawer";
 
-    private static final int S_DRAWER = 0, S_CONTINUE = 1, S_TABS = 2, S_TAB_ROW = 3, S_APPS = 4;
+    private static final int S_DRAWER = 0, S_CONTINUE = 1, S_TABS = 2, S_TAB_ROW = 3, S_GENRES = 4, S_GENRE_ROW = 5,
+            S_APPS = 6;
+    private static final int GENRE_TOP = 10, GENRE_TABS = 8, GENRE_MIN = 3;
 
     private final Activity act;
     private final Feed feed;
@@ -94,23 +96,26 @@ final class FeedHome {
     private final LinearLayout content;
     private final LinearLayout heroBlock;
     private final ImageView heroLogo;
-    private final TextView heroKicker, heroTitle, heroMeta, heroPlot;
+    private final TextView heroKicker, heroTitle, heroMeta, heroPlot, heroAction;
     private final LinearLayout heroTag;
     private final LinearLayout heroDots;
     private final LinearLayout drawerBand;
-    private final TextView continueLabel, tabsLabel, appsLabel;
-    private final RecyclerView continueRow, tabRow, appsGrid;
-    private final LinearLayout tabStrip;
-    private final View[] sections = new View[5];
+    private final TextView continueLabel, tabsLabel, genresLabel, appsLabel, tabCaption, genreCaption;
+    private final RecyclerView continueRow, tabRow, genreRow, appsGrid;
+    private final LinearLayout tabStrip, genreStrip;
+    private final View[] sections = new View[7];
 
     private final Map<String, App> apps = new HashMap<>();
     private List<String> drawer = new ArrayList<>();
     private final List<String> tabPkgs = new ArrayList<>();
     private String selectedTab = "";
+    private Map<String, List<Feed.Entry>> genres = Collections.emptyMap();
+    private final List<String> genreNames = new ArrayList<>();
+    private String selectedGenre = "";
     private List<Feed.Entry> heroes = Collections.emptyList();
     private int heroTurn = -1;
     private String backdropSource = "";
-    private int lastDrawer, lastContinue, lastTabRow;
+    private int lastDrawer, lastContinue, lastTabRow, lastGenreRow;
     private int movingIndex = -1;
     private final Runnable turn = this::nextHero;
     private final Rect rect = new Rect();
@@ -182,7 +187,7 @@ final class FeedHome {
         // 1. Header.
         heroBlock = column();
         heroBlock.setGravity(Gravity.BOTTOM);
-        heroBlock.setPadding(dp(8), 0, 0, dp(22));
+        heroBlock.setPadding(dp(8), 0, 0, dp(18));
         LinearLayout kickerRow = row();
         kickerRow.setGravity(Gravity.CENTER_VERTICAL);
         heroLogo = new ImageView(act);
@@ -197,7 +202,7 @@ final class FeedHome {
         klp.leftMargin = dp(10);
         kickerRow.addView(heroKicker, klp);
         heroBlock.addView(kickerRow, wrap());
-        heroTitle = text(44, Color.WHITE, light);
+        heroTitle = text(36, Color.WHITE, light);
         heroTitle.setSingleLine(true);
         heroTitle.setEllipsize(TextUtils.TruncateAt.END);
         heroTitle.setLetterSpacing(-0.01f);
@@ -223,9 +228,27 @@ final class FeedHome {
         LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(dp(520), ViewGroup.LayoutParams.WRAP_CONTENT);
         plp.topMargin = dp(10);
         heroBlock.addView(heroPlot, plp);
+        heroAction = text(14, 0xFF0B0D12, medium);
+        heroAction.setBackground(rounded(0xF2FFFFFF, dp(18)));
+        heroAction.setPadding(dp(16), dp(7), dp(18), dp(7));
+        heroAction.setVisibility(View.GONE);
+        LinearLayout.LayoutParams alp = wrap();
+        alp.topMargin = dp(14);
+        heroBlock.addView(heroAction, alp);
+        // The header is a carousel: Left and Right turn it (round and round), OK opens the title, Down goes to the drawer.
+        heroBlock.setFocusable(true);
+        heroBlock.setOnFocusChangeListener((v, has) -> {
+            heroAction.setVisibility(has ? View.VISIBLE : View.GONE);
+            handler.removeCallbacks(turn);
+            if (!has && heroes.size() > 1) handler.postDelayed(turn, TURN_MS);
+            if (has) scroll.smoothScrollTo(0, 0);
+        });
+        heroBlock.setOnKeyListener((v, key, e) -> heroKey(key, e));
         heroDots = row();
-        LinearLayout.LayoutParams dlp = wrap();
+        heroDots.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(10));
         dlp.topMargin = dp(14);
+        dlp.gravity = Gravity.CENTER_HORIZONTAL;
         heroBlock.addView(heroDots, dlp);
         content.addView(heroBlock, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(260)));
 
@@ -262,8 +285,27 @@ final class FeedHome {
         trp.topMargin = dp(8);
         content.addView(tabRow, trp);
         sections[S_TAB_ROW] = tabRow;
+        tabCaption = caption();
+        content.addView(tabCaption, captionParams());
 
-        // 5. Every other app.
+        // 5. Top 10 by genre, from all the drawer apps.
+        genresLabel = label(act.getString(R.string.feed_by_genre));
+        content.addView(genresLabel, labelParams());
+        genreStrip = row();
+        genreStrip.setClipChildren(false);
+        genreStrip.setClipToPadding(false);
+        genreStrip.setPadding(dp(8), dp(4), dp(8), dp(4));
+        content.addView(genreStrip, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        sections[S_GENRES] = genreStrip;
+        genreRow = row(S_GENRE_ROW);
+        LinearLayout.LayoutParams grp = rowParams(TILE_H + 28);
+        grp.topMargin = dp(8);
+        content.addView(genreRow, grp);
+        sections[S_GENRE_ROW] = genreRow;
+        genreCaption = caption();
+        content.addView(genreCaption, captionParams());
+
+        // 6. Every other app.
         appsLabel = label(act.getString(R.string.feed_apps));
         content.addView(appsLabel, labelParams());
         appsGrid = new RecyclerView(act);
@@ -311,7 +353,9 @@ final class FeedHome {
         continueLabel.setVisibility(feed.continueRow().isEmpty() ? View.GONE : View.VISIBLE);
         continueRow.setVisibility(feed.continueRow().isEmpty() ? View.GONE : View.VISIBLE);
         buildTabs();
+        buildGenres();
         heroes = Feed.pickHero(feed.heroCandidates(), drawer, HERO_PER_APP, HERO_TOTAL);
+        heroBlock.setFocusable(!heroes.isEmpty());
         buildDots();
         heroTurn = -1;
         handler.removeCallbacks(turn);
@@ -428,7 +472,8 @@ final class FeedHome {
         }
         switch (key) {
             case KeyEvent.KEYCODE_DPAD_UP:
-                host.onUp();
+                if (heroes.isEmpty()) host.onUp();
+                else heroBlock.requestFocus();
                 return true;
             case KeyEvent.KEYCODE_DPAD_DOWN:
                 focusSection(S_CONTINUE, 1);
@@ -663,6 +708,7 @@ final class FeedHome {
     private void bindTabRow() {
         List<Feed.Entry> list = feed.tabs().get(selectedTab);
         tabRow.setAdapter(new Tiles(list == null ? Collections.emptyList() : list, S_TAB_ROW, true));
+        tabCaption.setText("");
     }
 
     // ---- poster rows --------------------------------------------------------------------------------------
@@ -699,6 +745,7 @@ final class FeedHome {
             final ImageView badge = new ImageView(act);
             final View progress = new View(act);
             final View track = new View(act);
+            final TextView type = text(10, Color.WHITE, medium);
             String source = "";
 
             Holder(FrameLayout card) {
@@ -752,13 +799,26 @@ final class FeedHome {
             card.addView(h.track, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(4), Gravity.BOTTOM));
             h.progress.setBackgroundColor(0xFFE50914);
             card.addView(h.progress, new FrameLayout.LayoutParams(0, dp(4), Gravity.BOTTOM | Gravity.START));
+            h.type.setAllCaps(true);
+            h.type.setLetterSpacing(0.1f);
+            h.type.setBackground(rounded(0x99000000, dp(4)));
+            h.type.setPadding(dp(6), dp(2), dp(6), dp(2));
+            // Top right, under the IMDb tag: posters put their own title art at the bottom.
+            FrameLayout.LayoutParams yl = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.END);
+            yl.rightMargin = dp(8);
+            yl.topMargin = dp(8);
+            card.addView(h.type, yl);
 
             card.setOnFocusChangeListener((v, has) -> {
                 lift(v, has, 1.08f);
                 int pos = h.getBindingAdapterPosition();
                 if (has && pos != RecyclerView.NO_POSITION) {
                     if (section == S_CONTINUE) lastContinue = pos;
+                    else if (section == S_GENRE_ROW) lastGenreRow = pos;
                     else lastTabRow = pos;
+                    TextView cap = section == S_TAB_ROW ? tabCaption : section == S_GENRE_ROW ? genreCaption : null;
+                    if (cap != null) cap.setText(describe(list.get(pos)));
                 }
             });
             card.setOnClickListener(v -> {
@@ -793,7 +853,12 @@ final class FeedHome {
             if (!e.rating.isEmpty()) imdbTag(h.tag, e.rating, true);
             App a = apps.get(e.pkg);
             h.badge.setImageDrawable(a == null ? null : a.icon);
-            h.badge.setVisibility(section == S_CONTINUE && a != null ? View.VISIBLE : View.GONE);
+            h.badge.setVisibility(section != S_TAB_ROW && a != null ? View.VISIBLE : View.GONE);
+            String kind = kindLabel(e);
+            h.type.setText(kind);
+            h.type.setVisibility(section != S_CONTINUE && !kind.isEmpty() ? View.VISIBLE : View.GONE);
+            ((FrameLayout.LayoutParams) h.type.getLayoutParams()).topMargin = e.rating.isEmpty() ? dp(8) : dp(34);
+            h.type.requestLayout();
             boolean showProgress = e.progress > 0;
             h.track.setVisibility(showProgress ? View.VISIBLE : View.GONE);
             ViewGroup.LayoutParams plp = h.progress.getLayoutParams();
@@ -805,7 +870,7 @@ final class FeedHome {
                 if (b == null || !want.equals(h.source)) return;
                 h.art.setImageBitmap(b);
                 // Apps' posters carry their own title; TMDB backdrops do not.
-                if (!e.fromTmdb()) {
+                if (!e.plainArt()) {
                     h.title.setVisibility(View.GONE);
                     h.shade.setVisibility(ranked ? View.VISIBLE : View.GONE);
                 }
@@ -843,6 +908,16 @@ final class FeedHome {
                 case S_TAB_ROW:
                     if (focusRowAt(tabRow, lastTabRow)) return true;
                     continue;
+                case S_GENRES:
+                    int g = genreNames.indexOf(selectedGenre);
+                    if (g >= 0 && g < genreStrip.getChildCount()) {
+                        genreStrip.getChildAt(g).requestFocus();
+                        return true;
+                    }
+                    continue;
+                case S_GENRE_ROW:
+                    if (focusRowAt(genreRow, lastGenreRow)) return true;
+                    continue;
                 case S_APPS:
                     if (appsGrid.getAdapter() != null && appsGrid.getAdapter().getItemCount() > 0 && focusGridCell(0)) return true;
                     continue;
@@ -878,11 +953,12 @@ final class FeedHome {
             return scroll.getScrollY();
         }
         int y = rect.top + scroll.getScrollY();
-        if (y < continueLabel.getTop() || isIn(focused, drawerBand)) return 0;
+        if (y < continueLabel.getTop() || isIn(focused, drawerBand) || focused == heroBlock) return 0;
         if (isIn(focused, appsGrid)) {
             return Math.max(appsLabel.getTop() - dp(12), y - dp(150));
         }
-        View label = isIn(focused, continueRow) ? continueLabel : tabsLabel;
+        View label = isIn(focused, continueRow) ? continueLabel
+                : isIn(focused, genreStrip) || isIn(focused, genreRow) ? genresLabel : tabsLabel;
         return Math.max(0, label.getTop() - dp(12));
     }
 
@@ -914,12 +990,17 @@ final class FeedHome {
     // ---- header -------------------------------------------------------------------------------------------
 
     private void nextHero() {
+        stepHero(1);
+    }
+
+    /** Turn the header by {@code step} (either way, round and round). */
+    private void stepHero(int step) {
         handler.removeCallbacks(turn);
         if (heroes.isEmpty()) {
             heroBlock.setAlpha(0f);
             return;
         }
-        heroTurn = (heroTurn + 1) % heroes.size();
+        heroTurn = Math.floorMod(heroTurn + step, heroes.size());
         Feed.Entry e = heroes.get(heroTurn);
         heroBlock.animate().cancel();
         heroBlock.animate().alpha(0f).setDuration(heroBlock.getAlpha() > 0 ? 180 : 0).withEndAction(() -> {
@@ -931,13 +1012,8 @@ final class FeedHome {
             backdropSource = source;
             feed.loadArt(source, act.getResources().getDisplayMetrics().widthPixels, b -> showBackdrop(source, b));
         }
-        for (int i = 0; i < heroDots.getChildCount(); i++) {
-            heroDots.getChildAt(i).setBackground(rounded(i == heroTurn ? 0xF2FFFFFF : 0x4DFFFFFF, dp(3)));
-            ViewGroup.LayoutParams lp = heroDots.getChildAt(i).getLayoutParams();
-            lp.width = i == heroTurn ? dp(18) : dp(6);
-            heroDots.getChildAt(i).setLayoutParams(lp);
-        }
-        if (heroes.size() > 1) handler.postDelayed(turn, TURN_MS);
+        updateDots();
+        if (heroes.size() > 1 && !heroBlock.hasFocus()) handler.postDelayed(turn, TURN_MS);
     }
 
     private void fillHero(Feed.Entry e) {
@@ -945,7 +1021,8 @@ final class FeedHome {
         heroLogo.setImageDrawable(a == null ? null : a.icon);
         heroLogo.setVisibility(a == null ? View.GONE : View.VISIBLE);
         String app = a == null ? "" : a.label;
-        heroKicker.setText(app.isEmpty() ? act.getString(R.string.feed_new) : act.getString(R.string.feed_new_on, app));
+        heroKicker.setText(app);
+        heroAction.setText(app.isEmpty() ? act.getString(R.string.feed_open) : act.getString(R.string.feed_watch_on, app));
         heroTitle.setText(e.title);
         heroTag.removeAllViews();
         if (!e.rating.isEmpty()) imdbTag(heroTag, e.rating, false);
@@ -953,8 +1030,10 @@ final class FeedHome {
         ((LinearLayout.LayoutParams) heroMeta.getLayoutParams()).leftMargin = e.rating.isEmpty() ? 0 : dp(12);
         heroMeta.requestLayout();
         List<String> meta = new ArrayList<>();
-        if ("tv".equals(e.kind)) meta.add(act.getString(R.string.feed_series));
-        else if ("movie".equals(e.kind)) meta.add(act.getString(R.string.feed_movie));
+        String kind = kindLabel(e);
+        if (!kind.isEmpty()) meta.add(kind);
+        if (!e.subtitle.isEmpty()) meta.add(e.subtitle);   // "Season 3": why it counts as new
+        if (!e.genre.isEmpty()) meta.add(e.genre);
         if (!e.year.isEmpty()) meta.add(e.year);
         heroMeta.setText(TextUtils.join("  ·  ", meta));
         heroPlot.setText(e.overview);
@@ -975,15 +1054,156 @@ final class FeedHome {
         }).start();
     }
 
+    /** At most 5 dots, centred: the current one a pill, its neighbours smaller, the outer two smaller still. */
     private void buildDots() {
         heroDots.removeAllViews();
         if (heroes.size() < 2) return;
-        for (int i = 0; i < heroes.size(); i++) {
+        for (int i = 0; i < Math.min(5, heroes.size()); i++) {
             View dot = new View(act);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(6), dp(6));
-            if (i > 0) lp.leftMargin = dp(6);
+            lp.gravity = Gravity.CENTER_VERTICAL;
+            if (i > 0) lp.leftMargin = dp(10);
             heroDots.addView(dot, lp);
         }
+    }
+
+    private void updateDots() {
+        int k = heroDots.getChildCount();
+        if (k == 0) return;
+        // Five or more titles: the window is centred on the current one. Fewer: one dot per title.
+        int current = heroes.size() > 5 ? k / 2 : heroTurn;
+        for (int i = 0; i < k; i++) {
+            int dist = Math.abs(i - current);
+            View dot = heroDots.getChildAt(i);
+            LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) dot.getLayoutParams();
+            lp.width = dist == 0 ? dp(22) : dist == 1 ? dp(8) : dp(5);
+            lp.height = dist == 0 ? dp(8) : dist == 1 ? dp(8) : dp(5);
+            dot.setLayoutParams(lp);
+            dot.setBackground(rounded(dist == 0 ? 0xFFFFFFFF : dist == 1 ? 0xB3FFFFFF : 0x66FFFFFF, dp(4)));
+        }
+    }
+
+    private boolean heroKey(int key, KeyEvent e) {
+        if (e.getAction() != KeyEvent.ACTION_DOWN) return false;
+        switch (key) {
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+                stepHero(-1);
+                return true;
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+                stepHero(1);
+                return true;
+            case KeyEvent.KEYCODE_DPAD_UP:
+                host.onUp();
+                return true;
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+                focusDrawer();
+                return true;
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_ENTER:
+                if (heroTurn >= 0 && heroTurn < heroes.size()) {
+                    Feed.Entry h = heroes.get(heroTurn);
+                    if (!Feed.open(act, h)) Toast.makeText(act, act.getString(R.string.cant_open, h.title), Toast.LENGTH_SHORT).show();
+                }
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /** "TV show" or "Movie", empty when the add-on could not tell. */
+    private String kindLabel(Feed.Entry e) {
+        if ("tv".equals(e.kind)) return act.getString(R.string.feed_series);
+        if ("movie".equals(e.kind)) return act.getString(R.string.feed_movie);
+        return "";
+    }
+
+    /** The focused tile in words, under its row: title, type, genres, rating. */
+    private String describe(Feed.Entry e) {
+        List<String> parts = new ArrayList<>();
+        parts.add(e.title);
+        String kind = kindLabel(e);
+        if (!kind.isEmpty()) parts.add(kind);
+        if (!e.genre.isEmpty()) parts.add(e.genre);
+        if (!e.rating.isEmpty()) parts.add("IMDb " + e.rating);
+        App a = apps.get(e.pkg);
+        if (a != null) parts.add(a.label);
+        return TextUtils.join("  ·  ", parts);
+    }
+
+    // ---- genres ------------------------------------------------------------------------------------------
+
+    private void buildGenres() {
+        genres = Feed.genreRows(feed.tabs(), drawer, GENRE_TOP, GENRE_TABS, GENRE_MIN);
+        genreNames.clear();
+        genreNames.addAll(genres.keySet());
+        boolean any = !genreNames.isEmpty();
+        genresLabel.setVisibility(any ? View.VISIBLE : View.GONE);
+        genreStrip.setVisibility(any ? View.VISIBLE : View.GONE);
+        genreRow.setVisibility(any ? View.VISIBLE : View.GONE);
+        genreCaption.setVisibility(any ? View.VISIBLE : View.GONE);
+        boolean hadFocus = genreStrip.hasFocus();
+        genreStrip.removeAllViews();
+        if (!any) return;
+        if (!genreNames.contains(selectedGenre)) selectedGenre = genreNames.get(0);
+        for (int i = 0; i < genreNames.size(); i++) {
+            String name = genreNames.get(i);
+            TextView pill = text(14, Color.WHITE, medium);
+            pill.setText(name);
+            pill.setFocusable(true);
+            pill.setPadding(dp(16), dp(8), dp(16), dp(8));
+            pill.setForeground(ring(dp(20)));
+            styleGenre(pill, name.equals(selectedGenre));
+            final int index = i;
+            pill.setOnFocusChangeListener((v, has) -> {
+                lift(v, has, 1.06f);
+                if (has && !name.equals(selectedGenre)) {
+                    selectedGenre = name;
+                    lastGenreRow = 0;
+                    for (int k = 0; k < genreStrip.getChildCount(); k++) styleGenre((TextView) genreStrip.getChildAt(k), k == index);
+                    bindGenreRow();
+                }
+            });
+            pill.setOnClickListener(v -> focusSection(S_GENRE_ROW, 1));
+            pill.setOnKeyListener((v, key, e) -> {
+                if (e.getAction() != KeyEvent.ACTION_DOWN) return false;
+                if (key == KeyEvent.KEYCODE_DPAD_UP) return focusSection(S_GENRES - 1, -1);
+                if (key == KeyEvent.KEYCODE_DPAD_DOWN) return focusSection(S_GENRE_ROW, 1);
+                if (key == KeyEvent.KEYCODE_DPAD_LEFT) return index == 0;
+                if (key == KeyEvent.KEYCODE_DPAD_RIGHT) return index == genreNames.size() - 1;
+                return false;
+            });
+            LinearLayout.LayoutParams lp = wrap();
+            if (i > 0) lp.leftMargin = dp(10);
+            genreStrip.addView(pill, lp);
+        }
+        bindGenreRow();
+        if (hadFocus) focusSection(S_GENRES, 1);
+    }
+
+    private void styleGenre(TextView pill, boolean selected) {
+        pill.setBackground(rounded(selected ? 0xF2FFFFFF : 0x1FFFFFFF, dp(20)));
+        pill.setTextColor(selected ? 0xFF0B0D12 : 0xD9FFFFFF);
+    }
+
+    private void bindGenreRow() {
+        List<Feed.Entry> list = genres.get(selectedGenre);
+        genreRow.setAdapter(new Tiles(list == null ? Collections.emptyList() : list, S_GENRE_ROW, true));
+        genreCaption.setText("");
+    }
+
+    private TextView caption() {
+        TextView t = text(13, 0xB3FFFFFF, regular);
+        t.setSingleLine(true);
+        t.setEllipsize(TextUtils.TruncateAt.END);
+        return t;
+    }
+
+    private LinearLayout.LayoutParams captionParams() {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.leftMargin = dp(12);
+        lp.topMargin = dp(2);
+        return lp;
     }
 
     // ---- pieces -------------------------------------------------------------------------------------------

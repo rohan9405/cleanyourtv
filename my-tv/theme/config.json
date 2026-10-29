@@ -18,5 +18,6 @@
   "dock_glass": true,
   "icon_only_buttons": true,
   "focus_overshoot": false,
-  "advanced_effects": true
+  "advanced_effects": true,
+  "show_greeting": false
 }
