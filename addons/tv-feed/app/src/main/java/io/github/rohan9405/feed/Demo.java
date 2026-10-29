@@ -37,38 +37,64 @@ final class Demo {
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY, on).apply();
     }
 
+    private static final String NETFLIX = "com.netflix.ninja";
+    private static final String PRIME = "com.amazon.amazonvideo.livingroom";
+    private static final String HOTSTAR = "in.startv.hotstar";
+    private static final String APPLE = "com.apple.atve.androidtv.appletv";
+    private static final String YOUTUBE = "com.google.android.youtube.tv";
+    private static final String SONYLIV = "com.sonyliv";
+    private static final String ZEE5 = "com.graymatrix.did";
+    private static final String PLOT = "A sample title for previewing Home: the real header shows what is new on your "
+            + "services in the last 10 days, with its IMDb rating.";
+
     static Store.Snapshot snapshot(Context ctx) {
         List<Item> items = new ArrayList<>();
+        hero(ctx, items, "Minimum Wage", "tv", "2026", "8.4", NETFLIX, 0xFFB71C1C);
+        hero(ctx, items, "Gajab Raat", "movie", "2026", "7.9", NETFLIX, 0xFF4A148C);
+        hero(ctx, items, "Chaar Yaar", "tv", "2026", "8.1", PRIME, 0xFF0D47A1);
+        hero(ctx, items, "Love in Disguise", "tv", "2026", "7.2", PRIME, 0xFF1B5E20);
+        hero(ctx, items, "The Mob", "tv", "2026", "7.6", HOTSTAR, 0xFF263238);
+        hero(ctx, items, "Slow Horses", "tv", "2022", "8.2", APPLE, 0xFF37474F);
         String cont = ctx.getString(R.string.continue_watching);
-        add(ctx, items, cont, 0, "Panchayat", "S3 E4 · The Election", "9.0", 62, "com.amazon.amazonvideo.livingroom", 0xFF2E7D32, true);
-        add(ctx, items, cont, 0, "Kota Factory", "S3 E2", "9.0", 35, "com.netflix.ninja", 0xFF37474F, true);
-        add(ctx, items, cont, 0, "Scam 1992", "S1 E7 · Bull Run", "9.2", 80, "com.sonyliv", 0xFF6D4C41, false);
-        add(ctx, items, cont, 0, "The Family Man", "S2 E1", "8.7", 15, "com.amazon.amazonvideo.livingroom", 0xFF1565C0, false);
-        add(ctx, items, cont, 0, "Aspirants", "S2 E3", "9.1", 50, "com.amazon.amazonvideo.livingroom", 0xFF4E342E, false);
-        String yt = "YouTube · Recommended for you";
-        add(ctx, items, yt, 1, "How the Indian Railways run on time", "", "", -1, "com.google.android.youtube.tv", 0xFFC62828, true);
-        add(ctx, items, yt, 1, "Street food tour of Old Delhi", "", "", -1, "com.google.android.youtube.tv", 0xFFAD1457, false);
-        add(ctx, items, yt, 1, "Cricket highlights: final over", "", "", -1, "com.google.android.youtube.tv", 0xFF00838F, false);
-        add(ctx, items, yt, 1, "Lo-fi beats to study to", "", "", -1, "com.google.android.youtube.tv", 0xFF5E35B1, false);
-        add(ctx, items, yt, 1, "Building a house in 100 days", "", "", -1, "com.google.android.youtube.tv", 0xFF558B2F, false);
-        add(ctx, items, yt, 1, "Himalaya trek, day 4", "", "", -1, "com.google.android.youtube.tv", 0xFF283593, false);
-        String hs = "JioHotstar · Trending";
-        add(ctx, items, hs, 2, "Special Ops", "", "8.6", -1, "in.startv.hotstar", 0xFF263238, true);
-        add(ctx, items, hs, 2, "Aarya", "", "7.8", -1, "in.startv.hotstar", 0xFF880E4F, false);
-        add(ctx, items, hs, 2, "Criminal Justice", "", "8.1", -1, "in.startv.hotstar", 0xFF3E2723, false);
-        add(ctx, items, hs, 2, "Hostages", "", "7.4", -1, "in.startv.hotstar", 0xFF1A237E, false);
-        String nf = "Netflix · New this week";
-        add(ctx, items, nf, 3, "Sacred Games", "", "8.5", -1, "com.netflix.ninja", 0xFFB71C1C, true);
-        add(ctx, items, nf, 3, "Delhi Crime", "", "8.5", -1, "com.netflix.ninja", 0xFF212121, false);
-        add(ctx, items, nf, 3, "Jamtara", "", "7.8", -1, "com.netflix.ninja", 0xFF33691E, false);
+        add(ctx, items, Item.CONTINUE, cont, 0, "Panchayat", "S3 E4 · The Election", "9.0", 62, PRIME, 0xFF2E7D32);
+        add(ctx, items, Item.CONTINUE, cont, 0, "Kota Factory", "S3 E2", "9.0", 35, NETFLIX, 0xFF37474F);
+        add(ctx, items, Item.CONTINUE, cont, 0, "Scam 1992", "S1 E7 · Bull Run", "9.2", 80, SONYLIV, 0xFF6D4C41);
+        add(ctx, items, Item.CONTINUE, cont, 0, "The Family Man", "S2 E1", "8.7", 15, PRIME, 0xFF1565C0);
+        add(ctx, items, Item.CONTINUE, cont, 0, "Aspirants", "S2 E3", "9.1", 50, PRIME, 0xFF4E342E);
+        tab(ctx, items, NETFLIX, 0xFFB71C1C, "Sacred Games|8.5", "Delhi Crime|8.5", "Jamtara|7.8", "Kohrra|8.3", "Rana Naidu|6.8", "Trial by Fire|8.7");
+        tab(ctx, items, YOUTUBE, 0xFFC62828, "How the Indian Railways run on time|", "Street food tour of Old Delhi|",
+                "Cricket highlights: final over|", "Lo-fi beats to study to|", "Himalaya trek, day 4|");
+        tab(ctx, items, PRIME, 0xFF0D47A1, "Mirzapur|8.4", "Paatal Lok|8.1", "Made in Heaven|8.3", "Farzi|8.3", "Dahaad|7.9");
+        tab(ctx, items, HOTSTAR, 0xFF263238, "Special Ops|8.6", "Aarya|7.8", "Criminal Justice|8.1", "Hostages|7.4");
+        tab(ctx, items, SONYLIV, 0xFF6D4C41, "Rocket Boys|8.9", "Gullak|9.1", "Undekhi|7.9");
+        tab(ctx, items, ZEE5, 0xFF4A148C, "Sunflower|7.4", "Abhay|7.6", "Duranga|6.9");
         Map<String, int[]> probe = new LinkedHashMap<>();
         probe.put("(demo rows: no app on this TV was read)", new int[3]);
         return new Store.Snapshot(System.currentTimeMillis(), "", items, probe);
     }
 
-    private static void add(Context ctx, List<Item> items, String row, int order, String title, String subtitle,
-                            String rating, int progress, String pkg, int colour, boolean hero) {
+    private static void hero(Context ctx, List<Item> items, String title, String kind, String year, String rating,
+                             String pkg, int colour) {
+        Item i = add(ctx, items, Item.HERO, "", 0, title, "", rating, -1, pkg, colour);
+        i.kind = kind;
+        i.year = year;
+        i.overview = PLOT;
+        i.backdrop = draw(ctx, i.posterSource, title, colour, true);
+    }
+
+    private static void tab(Context ctx, List<Item> items, String pkg, int colour, String... titles) {
+        for (int n = 0; n < titles.length; n++) {
+            String[] t = titles[n].split("\\|", -1);
+            Item i = add(ctx, items, Item.APP, "", n + 1, t[0], "", t[1], -1, pkg, colour + n * 0x00080808);
+            i.overview = PLOT;
+        }
+    }
+
+    private static Item add(Context ctx, List<Item> items, String section, String row, int order, String title,
+                            String subtitle, String rating, int progress, String pkg, int colour) {
         Item i = new Item();
+        i.section = section;
+        i.tab = pkg;
         i.row = row;
         i.rowOrder = order;
         i.title = title;
@@ -77,11 +103,10 @@ final class Demo {
         i.progress = progress;
         i.pkg = pkg;
         i.intent = OPEN;
-        i.hero = hero;
         i.posterSource = "demo:" + title;
         i.poster = draw(ctx, i.posterSource, title, colour, false);
-        if (hero) i.backdrop = draw(ctx, i.posterSource, title, colour, true);
         items.add(i);
+        return i;
     }
 
     /** A gradient card with the title on it, saved where FeedProvider serves art from. */

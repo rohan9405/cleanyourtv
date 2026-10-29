@@ -88,6 +88,16 @@ final class Pick {
         return out;
     }
 
+    /** Best IMDb rating first; unrated titles (often too new to have one) after them, most popular first. */
+    static List<Item> rank(List<Item> in) {
+        List<Item> out = new ArrayList<>(in);
+        out.sort((a, b) -> {
+            int r = Double.compare(b.ratingValue(), a.ratingValue());
+            return r != 0 ? r : Double.compare(b.popularity, a.popularity);
+        });
+        return out;
+    }
+
     private static boolean notEmpty(String s) {
         return s != null && !s.trim().isEmpty();
     }

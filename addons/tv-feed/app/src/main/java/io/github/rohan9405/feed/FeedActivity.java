@@ -20,7 +20,7 @@ import java.util.Map;
  * The Feed screen, and the module card's target: what each app on this TV publishes (the probe), the rows Home
  * gets, the OMDb key and a Refresh button.
  *
- * <p>Set up from a computer without the remote (my-tv/omdb-key.sh): {@code --es omdb_key <key>} or
+ * <p>Set up from a computer without the remote (my-tv/api-keys.sh): {@code --es omdb_key <key>}, {@code --es tmdb_token <token>} or
  * {@code --ez demo true|false} stores the setting, starts a refresh and closes at once, with nothing shown.
  */
 public final class FeedActivity extends Activity {
@@ -90,19 +90,25 @@ public final class FeedActivity extends Activity {
         b.append("Reading TV rows: ").append(checkSelfPermission(Refresher.READ_TV)
                 == PackageManager.PERMISSION_GRANTED ? "allowed" : "not allowed yet").append('\n');
         b.append("IMDb ratings: ").append(Omdb.hasKey(this) ? "OMDb key set"
-                : "no OMDb key yet (sent from the Mac: my-tv/omdb-key.sh send)").append('\n');
+                : "no OMDb key yet (sent from the Mac: my-tv/api-keys.sh send)").append('\n');
+        b.append("New releases (TMDB): ").append(Tmdb.hasToken(this) ? "token set"
+                : "no token yet (sent from the Mac: my-tv/api-keys.sh send)").append('\n');
         b.append("Last refresh: ").append(s.refreshedMs == 0 ? "never"
                 : DateUtils.getRelativeTimeSpanString(s.refreshedMs)).append('\n');
         if (!s.error.isEmpty()) b.append("Problem: ").append(s.error).append('\n');
 
-        b.append("\nRows on Home\n");
+        // Per section and app: tiles, and how many have a rating.
+        PackageManager pm = getPackageManager();
         Map<String, int[]> rows = new LinkedHashMap<>();
         for (Item i : s.items) {
-            int[] n = rows.get(i.row);
-            if (n == null) rows.put(i.row, n = new int[2]);
+            String name = Item.CONTINUE.equals(i.section) ? "Continue watching"
+                    : (Item.HERO.equals(i.section) ? "Header, new in 10 days: " : "Top 10 tab: ") + label(pm, i.tab, false);
+            int[] n = rows.get(name);
+            if (n == null) rows.put(name, n = new int[2]);
             n[0]++;
             if (!i.rating.isEmpty()) n[1]++;
         }
+        b.append("\nOn Home\n");
         if (rows.isEmpty()) b.append("  none yet\n");
         for (Map.Entry<String, int[]> e : rows.entrySet()) {
             b.append("  ").append(e.getKey()).append(": ").append(e.getValue()[0]).append(" tiles");
@@ -112,18 +118,22 @@ public final class FeedActivity extends Activity {
 
         b.append("\nWhat each app publishes (Continue watching / recommendations / channels)\n");
         if (s.probe.isEmpty()) b.append("  nothing visible\n");
-        PackageManager pm = getPackageManager();
         for (Map.Entry<String, int[]> e : s.probe.entrySet()) {
-            String label = e.getKey();
-            try {
-                label = pm.getApplicationLabel(pm.getApplicationInfo(e.getKey(), 0)) + " (" + e.getKey() + ")";
-            } catch (PackageManager.NameNotFoundException ignored) {
-            }
             int[] n = e.getValue();
-            b.append("  ").append(label).append(": ").append(n[0]).append(" / ").append(n[1]).append(" / ").append(n[2]).append('\n');
+            b.append("  ").append(label(pm, e.getKey(), true)).append(": ").append(n[0]).append(" / ").append(n[1])
+                    .append(" / ").append(n[2]).append('\n');
         }
         b.append("\nApps not listed publish nothing this app can see.");
         status.setText(b);
+    }
+
+    private static String label(PackageManager pm, String pkg, boolean withPackage) {
+        try {
+            String l = pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString();
+            return withPackage ? l + " (" + pkg + ")" : l;
+        } catch (PackageManager.NameNotFoundException e) {
+            return pkg;
+        }
     }
 
     private TextView text(int sp, int colour) {
@@ -147,6 +157,11 @@ public final class FeedActivity extends Activity {
         String k = intent.getStringExtra("omdb_key");
         if (k != null) {
             Omdb.setKey(this, k);
+            setup = true;
+        }
+        String t = intent.getStringExtra("tmdb_token");
+        if (t != null) {
+            Tmdb.setToken(this, t);
             setup = true;
         }
         if (intent.hasExtra("demo")) {

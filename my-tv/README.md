@@ -36,14 +36,16 @@ IMDb ratings need a free OMDb key (omdbapi.com/apikey.aspx). It is kept on this 
 `~/.cleantv-private/omdb_key`, outside the repo, and sent to the TV over ADB; nothing is typed with the remote:
 
 ```bash
-my-tv/omdb-key.sh save                        # once: paste the key (hidden), checked with OMDb
-TV_HOST=<tv ip> my-tv/omdb-key.sh send        # after installing the Feed add-on (--emulator for the preview)
+my-tv/api-keys.sh save omdb                   # once each: paste the key (hidden), it is checked
+my-tv/api-keys.sh save tmdb
+TV_HOST=<tv ip> my-tv/api-keys.sh send       # after installing the Feed add-on (--emulator for the preview)
 ```
 
 ## What was applied (29 Oct 2026)
 
-- `my-tv/debloat.txt` with `tools/disable.sh`: the BF1 list, all four preloaded apps off, voice search kept, and the
-  ambient screensaver off with the screensaver set to the launcher's Clock first.
+- `my-tv/debloat.txt` with `tools/disable.sh`: the BF1 list, all four preloaded apps off, voice search kept.
+  Google's ambient screensaver was turned off at first, then back on: on this TV it still shows its photos, weather
+  and clock with the Google TV launcher disabled, so it stays the screensaver.
 - By hand, after the launcher was installed: setup wizard and Google TV launcher disabled, Home set to CleanYourTV.
 - Private DNS `dns.adguard-dns.com` (it was automatic). It does not block YouTube ads.
 
