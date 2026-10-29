@@ -278,8 +278,8 @@ final class Feed {
             for (Entry e : l) {
                 if (e.genre.isEmpty() || !seen.add(e.title.toLowerCase(java.util.Locale.ROOT))) continue;
                 for (String g : e.genre.split(",")) {
-                    String name = g.trim();
-                    if (name.isEmpty()) continue;
+                    String name = genreName(g);
+                    if (name.isEmpty() || byGenre.containsKey(name) && byGenre.get(name).contains(e)) continue;
                     List<Entry> list = byGenre.get(name);
                     if (list == null) byGenre.put(name, list = new ArrayList<>());
                     list.add(e);
@@ -297,6 +297,22 @@ final class Feed {
             out.put(g.getKey(), new ArrayList<>(l.subList(0, Math.min(perGenre, l.size()))));
         }
         return out;
+    }
+
+    /** One name per genre: TMDB's series genres pair two ("Action & Adventure"); OMDb names them singly ("Action"). */
+    static String genreName(String raw) {
+        String g = raw.trim();
+        switch (g) {
+            case "Action & Adventure":
+                return "Action";
+            case "Sci-Fi & Fantasy":
+            case "Science Fiction":
+                return "Sci-Fi";
+            case "War & Politics":
+                return "War";
+            default:
+                return g;
+        }
     }
 
     /** The art at {@code source}, decoded to about {@code widthPx}; onLoaded on the main thread, null when none. */
