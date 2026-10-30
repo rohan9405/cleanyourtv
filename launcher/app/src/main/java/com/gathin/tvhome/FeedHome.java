@@ -366,6 +366,16 @@ final class FeedHome {
         nextHero();
     }
 
+    /** Down from the top bar: the header, or the drawer when there is nothing in it. */
+    void focusTop() {
+        if (heroes.isEmpty()) {
+            focusDrawer();
+            return;
+        }
+        heroBlock.requestFocus();
+        scroll.smoothScrollTo(0, 0);
+    }
+
     /** Focus the drawer, on the tile it was last on. */
     void focusDrawer() {
         if (drawerBand.getChildCount() == 0) {

@@ -863,7 +863,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP) return true;
             if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
                 if (feedHome != null) {
-                    feedHome.focusDrawer();
+                    feedHome.focusTop();
                     return true;
                 }
                 // Back to the dock tile Up came from, not wherever the focus finder lands.
