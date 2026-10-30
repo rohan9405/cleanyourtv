@@ -27,6 +27,7 @@ import java.util.List;
 final class Tmdb {
     static final String PREFS = "tmdb";
     static final String KEY = "token";
+    /** How far back "new" goes; a service that releases little looks further (see {@link Providers#newDays}). */
     static final int NEW_DAYS = 14;
     private static final long HOUR_MS = 60L * 60 * 1000;
     /** What is new or popular moves through the day; a genre's best-known titles, slowly; a film's first date, never. */
@@ -81,7 +82,7 @@ final class Tmdb {
      * kept: the caller decides from it whether the film is recent.
      */
     List<Title> newReleases(int provider, LocalDate today) {
-        String from = today.minusDays(NEW_DAYS).toString(), to = today.toString();
+        String from = today.minusDays(Providers.newDays(provider)).toString(), to = today.toString();
         List<Title> out = new ArrayList<>();
         add(out, discover("tv", provider, LIST_MS, "first_air_date.gte", from, "first_air_date.lte", to), "tv");
         add(out, discover("movie", provider, LIST_MS, "primary_release_date.gte", from, "primary_release_date.lte", to), "movie");
@@ -105,7 +106,7 @@ final class Tmdb {
      * season (a long-running show airing weekly) is not new and stays out: each candidate's seasons are checked.
      */
     List<Title> newSeasons(int provider, LocalDate today) {
-        LocalDate from = today.minusDays(NEW_DAYS);
+        LocalDate from = today.minusDays(Providers.newDays(provider));
         List<Title> airing = new ArrayList<>();
         add(airing, discover("tv", provider, LIST_MS, "air_date.gte", from.toString(), "air_date.lte", today.toString()), "tv");
         List<Title> out = new ArrayList<>();

@@ -24,6 +24,14 @@ final class Providers {
     }
 
     /** Browsers publish their tabs as Continue watching; those are not shows. */
+    /** Apple TV+ releases a few titles a month: two weeks would leave its header nearly empty. */
+    static final int APPLE_TV = 350, APPLE_TV_NEW_DAYS = 30;
+
+    /** How many days back a service's titles count as new for the header. */
+    static int newDays(int provider) {
+        return provider == APPLE_TV ? APPLE_TV_NEW_DAYS : Tmdb.NEW_DAYS;
+    }
+
     static boolean browser(String pkg) {
         return pkg != null && (pkg.contains("browser") || pkg.equals("com.android.chrome"));
     }
