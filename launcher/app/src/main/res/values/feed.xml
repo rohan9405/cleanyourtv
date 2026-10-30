@@ -18,4 +18,7 @@
     <string name="feed_movie" translatable="false">Movie</string>
     <string name="bluetooth" translatable="false">Bluetooth</string>
     <string name="feed_accessories" translatable="false">Remotes &amp; Accessories</string>
+    <!-- Under the date: the Feed add-on's refresh. -->
+    <string name="feed_refreshing">Refreshing · %1$d%%</string>
+    <string name="feed_updated">Updated %1$s</string>
 </resources>

@@ -358,9 +358,25 @@ final class FeedHome {
         continueRow.setVisibility(cont.isEmpty() ? View.GONE : View.VISIBLE);
         buildTabs();
         buildGenres();
+        Feed.Entry showing = heroTurn >= 0 && heroTurn < heroes.size() ? heroes.get(heroTurn) : null;
         heroes = Feed.pickHero(feed.heroCandidates(), drawer, HERO_PER_APP, HERO_TOTAL);
         heroBlock.setFocusable(!heroes.isEmpty());
         buildDots();
+        // A refresh keeps the title on screen where it still is, refreshed in place: the header neither blanks nor
+        // starts again from the first title each time the add-on publishes.
+        int keep = -1;
+        for (int i = 0; showing != null && i < heroes.size(); i++) {
+            Feed.Entry h = heroes.get(i);
+            if (h.pkg.equals(showing.pkg) && h.title.equals(showing.title)) keep = i;
+        }
+        if (keep >= 0) {
+            heroTurn = keep;
+            fillHero(heroes.get(keep));
+            updateDots();
+            handler.removeCallbacks(turn);
+            if (heroes.size() > 1 && !heroBlock.hasFocus()) handler.postDelayed(turn, TURN_MS);
+            return;
+        }
         heroTurn = -1;
         handler.removeCallbacks(turn);
         nextHero();

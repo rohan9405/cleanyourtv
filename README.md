@@ -19,7 +19,7 @@ The original project's README, with the debloat guide and the launcher's own doc
 | ![Top 10 by genre: Sci-Fi, with titles from Netflix, Prime Video, JioHotstar and Apple TV](docs/fork/genres.jpg) | **By genre.** Drama, Comedy, Action, Sci-Fi and more, each row taking your drawer apps in turn so no single app fills it. |
 | ![The Apps grid with every other installed app](docs/fork/apps.jpg) | **Apps.** Every other installed app. |
 
-The top bar has the clock and a short date, and icon buttons for Inputs, Wi-Fi, **Bluetooth** (it opens Remotes &
+The top bar has the clock, a short date, the refresh under it (`Refreshing · 40%`, then `Updated 8:41 AM`), and icon buttons for Inputs, Wi-Fi, **Bluetooth** (it opens Remotes &
 Accessories) and Settings. Google's ambient screensaver stays.
 
 ## Features
