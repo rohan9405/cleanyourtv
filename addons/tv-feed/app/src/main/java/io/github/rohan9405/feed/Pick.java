@@ -143,4 +143,35 @@ final class Pick {
     private static boolean notEmpty(String s) {
         return s != null && !s.trim().isEmpty();
     }
+
+    /** How old a YouTube video may be for the header. */
+    static final int NEW_VIDEO_DAYS = 7;
+    private static final java.util.regex.Pattern AGE =
+            java.util.regex.Pattern.compile("(\\d+)\\s+(second|minute|hour|day|week|month|year)s?\\s+ago");
+
+    /**
+     * YouTube gives no upload date, only "Channel • 3 days ago" (or "Streamed 10 minutes ago") in the description:
+     * true up to {@value #NEW_VIDEO_DAYS} days old, and for a video with no age (live now).
+     */
+    static boolean newVideo(String description) {
+        java.util.regex.Matcher m = AGE.matcher(description == null ? "" : description.toLowerCase(java.util.Locale.ROOT));
+        String unit = null;
+        long n = 0;
+        while (m.find()) {   // the last age in it: titles can hold numbers too
+            n = Long.parseLong(m.group(1));
+            unit = m.group(2);
+        }
+        if (unit == null) return true;
+        switch (unit) {
+            case "year":
+            case "month":
+                return false;
+            case "week":
+                return n * 7 <= NEW_VIDEO_DAYS;
+            case "day":
+                return n <= NEW_VIDEO_DAYS;
+            default:
+                return true;
+        }
+    }
 }

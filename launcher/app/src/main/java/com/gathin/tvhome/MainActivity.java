@@ -2581,19 +2581,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         android.widget.TextClock date = findViewById(R.id.date);
         date.setFormat12Hour("EEE, d MMM");
         date.setFormat24Hour("EEE, d MMM");
+        // Only while a refresh runs: "Refreshing · 40%", gone when it is done.
         TextView status = findViewById(R.id.feedStatus);
-        status.setVisibility(View.VISIBLE);
         feed.setStatusListener((progress, refreshed) -> {
-            if (progress >= 0) {
-                status.setText(getString(R.string.feed_refreshing, progress));
-            } else if (refreshed > 0) {
-                boolean today = android.text.format.DateUtils.isToday(refreshed);
-                String when = today ? android.text.format.DateFormat.getTimeFormat(this).format(new java.util.Date(refreshed))
-                        : android.text.format.DateFormat.format("EEE h:mm a", refreshed).toString();
-                status.setText(getString(R.string.feed_updated, when));
-            } else {
-                status.setText("");
-            }
+            status.setVisibility(progress >= 0 ? View.VISIBLE : View.GONE);
+            if (progress >= 0) status.setText(getString(R.string.feed_refreshing, progress));
         });
     }
 

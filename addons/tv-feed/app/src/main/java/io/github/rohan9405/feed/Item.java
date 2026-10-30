@@ -21,6 +21,8 @@ final class Item {
     int rowOrder;
     String title = "";
     String subtitle = "";
+    /** The app's row a YouTube video came from, while a refresh orders them; not stored. */
+    String subtitleRow = "";
     String overview = "";
     /** "movie", "tv" or empty. */
     String kind = "";
