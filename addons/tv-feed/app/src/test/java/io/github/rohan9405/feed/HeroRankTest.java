@@ -67,18 +67,18 @@ public class HeroRankTest {
     }
 
     @Test
-    public void tenPerAppAndOtherSectionsUntouched() {
+    public void twentyFivePerAppAndOtherSectionsUntouched() {
         List<Item> in = new ArrayList<>();
         Item cont = new Item();
         cont.section = Item.CONTINUE;
         in.add(cont);
-        for (int i = 0; i < 14; i++) in.add(hero("netflix", "n" + i, String.valueOf(5 + i * 0.1), 0));
+        for (int i = 0; i < 30; i++) in.add(hero("netflix", "n" + i, String.valueOf(5 + i * 0.1), 0));
         for (int i = 0; i < 3; i++) in.add(hero("prime", "p" + i, "", i));
         List<Item> out = Refresher.keepHeroTop(in);
-        assertEquals(1 + 10 + 3, out.size());
+        assertEquals(1 + 25 + 3, out.size());
         assertEquals(Item.CONTINUE, out.get(0).section);
-        assertEquals("n13", out.get(1).title);
+        assertEquals("n29", out.get(1).title);
         assertEquals(1, out.get(1).rowOrder);
-        assertEquals("p2", out.get(11).title);
+        assertEquals("p2", out.get(26).title);
     }
 }

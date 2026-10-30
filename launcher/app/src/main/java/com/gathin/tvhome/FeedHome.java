@@ -71,6 +71,10 @@ final class FeedHome {
     private static final int IMDB_YELLOW = 0xFFF5C518;
     private static final int HERO_PER_APP = 5;
     private static final int HERO_TOTAL = 20;
+    /** With a drawer app focused, the header is that app's new releases only: its 5 best, then 10 drawn from the rest. */
+    private static final int HERO_ONE_APP = 15, HERO_ONE_BEST = 5;
+    /** Long enough that sweeping along the drawer does not turn the header at every app passed. */
+    private static final long HERO_SWITCH_MS = 350;
     private static final int GRID_COLUMNS = 6;
     private static final String PREFS = "feed_home";
     private static final String NETFLIX = "com.netflix.ninja";
@@ -121,6 +125,9 @@ final class FeedHome {
     private int lastDrawer, lastContinue, lastTabRow, lastGenreRow;
     private int movingIndex = -1;
     private final Runnable turn = this::nextHero;
+    /** The drawer app the header shows (null: every drawer app's), and the one focus just reached. */
+    private String heroApp, pendingHeroApp;
+    private final Runnable switchHero = () -> showHeroFor(pendingHeroApp);
     private final Rect rect = new Rect();
 
     /** An installed TV app. */
@@ -347,6 +354,7 @@ final class FeedHome {
 
     void stop() {
         handler.removeCallbacks(turn);
+        handler.removeCallbacks(switchHero);
         endMove(false);
     }
 
@@ -359,7 +367,7 @@ final class FeedHome {
         buildTabs();
         buildGenres();
         Feed.Entry showing = heroTurn >= 0 && heroTurn < heroes.size() ? heroes.get(heroTurn) : null;
-        heroes = Feed.pickHero(feed.heroCandidates(), drawer, HERO_PER_APP, HERO_TOTAL);
+        heroes = pickHeroes();
         heroBlock.setFocusable(!heroes.isEmpty());
         buildDots();
         // A refresh keeps the title on screen where it still is, refreshed in place: the header neither blanks nor
@@ -379,6 +387,31 @@ final class FeedHome {
         }
         heroTurn = -1;
         handler.removeCallbacks(turn);
+        nextHero();
+    }
+
+    /**
+     * The focused drawer app's new releases, or when it has none (YouTube; an app with nothing new) or no app was
+     * focused yet, every drawer app's in turn. The draw changes with each refresh.
+     */
+    private List<Feed.Entry> pickHeroes() {
+        List<Feed.Entry> own = heroApp == null ? null : feed.heroCandidates().get(heroApp);
+        if (own != null && !own.isEmpty()) {
+            return Feed.pickApp(own, HERO_ONE_APP, HERO_ONE_BEST, feed.refreshed() ^ heroApp.hashCode());
+        }
+        return Feed.pickHero(feed.heroCandidates(), drawer, HERO_PER_APP, HERO_TOTAL, feed.refreshed());
+    }
+
+    /** Focus settled on a drawer app: the header turns to its new releases, from the first. */
+    private void showHeroFor(String pkg) {
+        if (pkg == null || pkg.equals(heroApp)) return;
+        heroApp = pkg;
+        List<Feed.Entry> next = pickHeroes();
+        if (next.equals(heroes)) return;
+        heroes = next;
+        heroBlock.setFocusable(!heroes.isEmpty());
+        buildDots();
+        heroTurn = -1;
         nextHero();
     }
 
@@ -518,7 +551,12 @@ final class FeedHome {
             final int index = i;
             tile.setOnFocusChangeListener((v, has) -> {
                 lift(v, has, movingIndex == index ? 1.16f : 1.12f);
-                if (has) lastDrawer = index;
+                if (has) {
+                    lastDrawer = index;
+                    pendingHeroApp = a.pkg;
+                    handler.removeCallbacks(switchHero);
+                    handler.postDelayed(switchHero, HERO_SWITCH_MS);
+                }
             });
             tile.setOnClickListener(v -> {
                 if (movingIndex >= 0) endMove(true);
