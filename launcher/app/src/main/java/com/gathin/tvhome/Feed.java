@@ -98,6 +98,13 @@ final class Feed {
     private final Runnable onChange;
     private final ExecutorService io = Executors.newFixedThreadPool(2);
     private final ContentObserver observer;
+    private final Uri statusUri;
+    private final ContentObserver statusObserver;
+    /** The add-on's refresh: progress 0 to 100, or -1 when none runs; when the last one finished (0: never). */
+    interface StatusListener {
+        void onStatus(int progress, long refreshedMs);
+    }
+    private StatusListener statusListener;
     /** Decoded art, in RGB_565: a tile is about 160 KB, so this holds a screen of rows and a few backdrops. */
     private final LruCache<String, Bitmap> art = new LruCache<String, Bitmap>(16 * 1024 * 1024) {
         @Override
@@ -121,6 +128,13 @@ final class Feed {
             @Override
             public void onChange(boolean selfChange) {
                 read();
+            }
+        };
+        statusUri = uri.buildUpon().path("status").build();
+        statusObserver = new ContentObserver(main) {
+            @Override
+            public void onChange(boolean selfChange) {
+                readStatus();
             }
         };
     }
@@ -152,9 +166,37 @@ final class Feed {
         if (changed && watching) read();
     }
 
+    void setStatusListener(StatusListener l) {
+        statusListener = l;
+    }
+
+    /** An add-on from before the status existed answers nothing: the listener is not called. */
+    private void readStatus() {
+        try {
+            io.execute(() -> {
+                int progress;
+                long refreshed;
+                try (Cursor c = ctx.getContentResolver().query(statusUri, null, null, null, null)) {
+                    if (c == null || !c.moveToFirst()) return;
+                    progress = i(c, "progress");
+                    int r = c.getColumnIndex("refreshed");
+                    refreshed = r < 0 || c.isNull(r) ? 0 : c.getLong(r);
+                } catch (RuntimeException gone) {
+                    return;
+                }
+                main.post(() -> {
+                    if (statusListener != null) statusListener.onStatus(progress, refreshed);
+                });
+            });
+        } catch (RejectedExecutionException shutDown) {
+            // Home is being destroyed.
+        }
+    }
+
     void start() {
         if (!watching) {
             try {
+                ctx.getContentResolver().registerContentObserver(statusUri, false, statusObserver);
                 ctx.getContentResolver().registerContentObserver(uri, false, observer);
                 watching = true;
             } catch (SecurityException e) {
@@ -162,10 +204,14 @@ final class Feed {
             }
         }
         read();
+        readStatus();
     }
 
     void stop() {
-        if (watching) ctx.getContentResolver().unregisterContentObserver(observer);
+        if (watching) {
+            ctx.getContentResolver().unregisterContentObserver(observer);
+            ctx.getContentResolver().unregisterContentObserver(statusObserver);
+        }
         watching = false;
     }
 

@@ -300,6 +300,18 @@
                             android:letterSpacing="0.14"
                             android:textAllCaps="true" />
 
+                        <TextView
+                            android:id="@+id/feedStatus"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:singleLine="true"
+                            android:textColor="#80FFFFFF"
+                            android:textSize="12sp"
+                            android:fontFamily="@string/font_regular"
+                            android:letterSpacing="0.04"
+                            android:visibility="gone" />
+
                         <!-- Lunar date ("Lunar 13/9 · Year of the Horse"), shown when lunar_date is on. -->
                         <TextView
                             android:id="@+id/lunarDate"

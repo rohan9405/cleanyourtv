@@ -30,6 +30,11 @@ public final class FeedProvider extends ContentProvider {
         return new Uri.Builder().scheme(ContentResolver.SCHEME_CONTENT).authority(AUTHORITY).appendPath("items").build();
     }
 
+    /** The running refresh's progress (-1 when none runs) and when the last one finished, for Home's top bar. */
+    static Uri statusUri() {
+        return new Uri.Builder().scheme(ContentResolver.SCHEME_CONTENT).authority(AUTHORITY).appendPath("status").build();
+    }
+
     static Uri imageUri(String name) {
         return new Uri.Builder().scheme(ContentResolver.SCHEME_CONTENT).authority(AUTHORITY)
                 .appendPath("image").appendPath(name).build();
@@ -42,7 +47,14 @@ public final class FeedProvider extends ContentProvider {
 
     @Override
     public Cursor query(Uri uri, String[] projection, String selection, String[] args, String sort) {
-        if (!allowed() || !"items".equals(uri.getLastPathSegment())) return null;
+        if (!allowed()) return null;
+        if ("status".equals(uri.getLastPathSegment())) {
+            MatrixCursor c = new MatrixCursor(new String[] {"progress", "refreshed"});
+            c.addRow(new Object[] {Refresher.progress(), Store.get(getContext()).refreshedMs});
+            c.setNotificationUri(getContext().getContentResolver(), statusUri());
+            return c;
+        }
+        if (!"items".equals(uri.getLastPathSegment())) return null;
         Store.Snapshot s = Store.get(getContext());
         // Home sends its drawer apps: TMDB is asked about those only, and straight away for one just added.
         boolean added = args != null && Refresher.setDrawer(getContext(), args);

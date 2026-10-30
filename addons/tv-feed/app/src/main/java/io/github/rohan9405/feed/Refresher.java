@@ -46,6 +46,8 @@ final class Refresher {
     private static final AtomicBoolean RUNNING = new AtomicBoolean();
     /** Asked for while a refresh was running (an app joined the drawer): run once more when it ends. */
     private static final AtomicBoolean AGAIN = new AtomicBoolean();
+    /** How far the running refresh is, 0 to 100; -1 when none runs. Home shows it under the date. */
+    private static volatile int progress = -1;
     private static final String DRAWER_PREFS = "drawer", DRAWER = "apps";
 
     private Refresher() {
@@ -58,11 +60,13 @@ final class Refresher {
         ONE.execute(() -> {
             try {
                 long started = android.os.SystemClock.elapsedRealtime();
+                step(app, 0);
                 Store.put(app, run(app));
                 android.util.Log.i("Feed", "refresh took " + (android.os.SystemClock.elapsedRealtime() - started) + " ms");
                 app.getContentResolver().notifyChange(FeedProvider.itemsUri(), null);
             } finally {
                 RUNNING.set(false);
+                step(app, -1);
                 if (onDone != null) onDone.run();
                 if (AGAIN.getAndSet(false)) kick(app, null);
             }
@@ -91,6 +95,18 @@ final class Refresher {
     static boolean wanted(Context ctx, String pkg) {
         Set<String> drawer = ctx.getSharedPreferences(DRAWER_PREFS, Context.MODE_PRIVATE).getStringSet(DRAWER, null);
         return drawer == null || drawer.contains(pkg);
+    }
+
+    static int progress() {
+        return progress;
+    }
+
+    /** Moves the progress on (never back, so parallel steps cannot make it jump about) and tells Home. */
+    private static void step(Context ctx, int percent) {
+        int now = progress;
+        if (percent >= 0 && now >= percent) return;
+        progress = percent;
+        ctx.getContentResolver().notifyChange(FeedProvider.statusUri(), null);
     }
 
     static boolean running() {
@@ -177,6 +193,7 @@ final class Refresher {
 
         // What is on the TV itself is ready now: show it with the last refresh's TMDB rows while those are fetched.
         showEarly(ctx, items, published.keySet(), probe);
+        step(ctx, 10);
 
         // TMDB: the header's new releases for every service installed here, and a top 10 for the ones that publish none.
         // Only the drawer's apps: Home shows TMDB rows for no other. One thread per service: each asks TMDB dozens of
@@ -193,9 +210,10 @@ final class Refresher {
                 found.add(services.submit(() -> fromService(tmdb, pkg, p.getValue(), today, local, published.containsKey(pkg))));
             }
             android.util.Log.i("Feed", "TMDB for " + found.size() + " drawer apps");
-            for (Future<List<Item>> f : found) {
+            for (int n = 0; n < found.size(); n++) {
                 try {
-                    items.addAll(f.get());
+                    items.addAll(found.get(n).get());
+                    step(ctx, 10 + 60 * (n + 1) / found.size());
                 } catch (Exception e) {
                     error.append("TMDB: ").append(e.getClass().getSimpleName()).append(". ");
                 }
@@ -206,8 +224,11 @@ final class Refresher {
         }
 
         // Ratings (the StreamRatings cache), then the header's ranking, then art.
+        step(ctx, 70);
         Omdb omdb = new Omdb(ctx, RATING_BUDGET);
+        int rated = 0;
         for (Item i : items) {
+            step(ctx, 70 + 15 * rated++ / Math.max(1, items.size()));
             if (!Pick.rateable(i.pkg)) continue;
             Omdb.Entry e = omdb.lookup(i.title, i.year);
             if (e == null) continue;
@@ -224,9 +245,10 @@ final class Refresher {
                 else i.poster = Images.cache(ctx, i.posterSource, false);
             }));
         }
-        for (Future<?> f : jobs) {
+        for (int n = 0; n < jobs.size(); n++) {
             try {
-                f.get();
+                step(ctx, 85 + 14 * n / Math.max(1, jobs.size()));
+                jobs.get(n).get();
             } catch (Exception ignored) {
                 // That tile shows its title on a plain card.
             }
