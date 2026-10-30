@@ -80,8 +80,9 @@ Accessories) and Settings. Google's ambient screensaver stays.
 | Posters | Downloaded once, kept on the TV, loaded per tile as it scrolls into view |
 
 A normal refresh takes about 10 seconds in the background on the BRAVIA. Home shows the last saved rows at once, and
-Continue watching and the apps' own rows update within a second or two, before TMDB is asked anything; every app's
-TMDB rows are then fetched at the same time, not one app after another.
+Continue watching and the apps' own rows update within a second or two, before TMDB is asked anything. TMDB is then asked
+about your drawer apps only, all at the same time: add an app to the drawer and its rows are fetched straight away;
+remove one and it is no longer fetched.
 
 ### Where recommendations come from
 

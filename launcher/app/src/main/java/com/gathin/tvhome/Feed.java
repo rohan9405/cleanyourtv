@@ -141,6 +141,17 @@ final class Feed {
         }
     }
 
+    /** The drawer's apps, sent with every read: the add-on fetches TMDB rows for these only. */
+    private volatile String[] drawer;
+
+    /** The drawer changed (or Home loaded it): tell the add-on, which starts fetching for an app just added. */
+    void setDrawer(List<String> apps) {
+        String[] now = apps.toArray(new String[0]);
+        boolean changed = drawer != null && !java.util.Arrays.equals(drawer, now);
+        drawer = now;
+        if (changed && watching) read();
+    }
+
     void start() {
         if (!watching) {
             try {
@@ -187,7 +198,7 @@ final class Feed {
         try {
             io.execute(() -> {
                 List<Entry> entries = new ArrayList<>();
-                try (Cursor c = ctx.getContentResolver().query(uri, COLUMNS, null, null, null)) {
+                try (Cursor c = ctx.getContentResolver().query(uri, COLUMNS, null, drawer, null)) {
                     // By name: the add-on may answer with its columns in its own order, or with more of them.
                     while (c != null && c.moveToNext()) {
                         entries.add(new Entry(s(c, "section"), s(c, "tab"), i(c, "row_order"), s(c, "title"),

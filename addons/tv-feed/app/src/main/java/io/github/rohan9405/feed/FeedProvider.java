@@ -44,7 +44,10 @@ public final class FeedProvider extends ContentProvider {
     public Cursor query(Uri uri, String[] projection, String selection, String[] args, String sort) {
         if (!allowed() || !"items".equals(uri.getLastPathSegment())) return null;
         Store.Snapshot s = Store.get(getContext());
-        if (System.currentTimeMillis() - s.refreshedMs > Refresher.STALE_MS) Refresher.kick(getContext(), null);
+        // Home sends its drawer apps: TMDB is asked about those only, and straight away for one just added.
+        boolean added = args != null && Refresher.setDrawer(getContext(), args);
+        if (added) Refresher.kickSoon(getContext());
+        else if (System.currentTimeMillis() - s.refreshedMs > Refresher.STALE_MS) Refresher.kick(getContext(), null);
         MatrixCursor c = new MatrixCursor(COLUMNS);
         List<Item> items = s.items;
         for (Item i : items) {
