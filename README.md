@@ -74,11 +74,14 @@ Accessories) and Settings. Google's ambient screensaver stays.
 | Data | Refreshed |
 |---|---|
 | Continue watching, the apps' own rows | By each app, usually when you use it; Home re-reads them at most every 20 min |
-| New releases, popular titles, genre pools (TMDB) | Every 6 hours; the 14-day window moves daily |
+| New releases, popular titles (TMDB) | Every 6 hours; the 14-day window moves daily |
+| Genre pools, new seasons (TMDB) | Every 24 and 12 hours; a film's first release date is kept for a month |
 | IMDb ratings | 3 to 30 days by release age |
 | Posters | Downloaded once, kept on the TV, loaded per tile as it scrolls into view |
 
-A normal refresh takes about 5 seconds in the background on the BRAVIA. Home shows the last saved rows at once.
+A normal refresh takes about 10 seconds in the background on the BRAVIA. Home shows the last saved rows at once, and
+Continue watching and the apps' own rows update within a second or two, before TMDB is asked anything; every app's
+TMDB rows are then fetched at the same time, not one app after another.
 
 ### Where recommendations come from
 

@@ -147,31 +147,30 @@ final class Refresher {
         }
         for (List<Item> l : published.values()) items.addAll(l);
 
+        // What is on the TV itself is ready now: show it with the last refresh's TMDB rows while those are fetched.
+        showEarly(ctx, items, published.keySet(), probe);
+
         // TMDB: the header's new releases for every service installed here, and a top 10 for the ones that publish none.
+        // One thread per service: each asks TMDB dozens of things, and one at a time that took minutes.
         Tmdb tmdb = new Tmdb(ctx);
         if (tmdb.usable()) {
             LocalDate today = LocalDate.now();
+            List<Item> local = new ArrayList<>(items);
+            ExecutorService services = Executors.newFixedThreadPool(Providers.TMDB.size());
+            List<Future<List<Item>>> found = new ArrayList<>();
             for (Map.Entry<String, Integer> p : Providers.TMDB.entrySet()) {
                 String pkg = p.getKey();
                 if (!installed(pm, pkg)) continue;
-                // Premieres in the window, and series whose new season premiered in it; never a weekly episode of an old one.
-                List<Tmdb.Title> fresh = tmdb.newReleases(p.getValue(), today);
-                for (Tmdb.Title t : tmdb.newSeasons(p.getValue(), today)) {
-                    boolean dup = false;
-                    for (Tmdb.Title f : fresh) dup |= f.id == t.id && f.kind.equals(t.kind);
-                    if (!dup) fresh.add(t);
-                }
-                for (Tmdb.Title t : fresh) {
-                    if (Pick.recentEnough(t.released, t.season, today)) items.add(fromTmdb(t, pkg, Item.HERO, 0));
-                }
-                for (Tmdb.Title t : tmdb.genrePool(p.getValue(), POOL_PER_GENRE)) {
-                    if (!hasTitle(items, pkg, t.name)) items.add(fromTmdb(t, pkg, Item.POOL, 0));
-                }
-                if (!published.containsKey(pkg)) {
-                    List<Tmdb.Title> top = tmdb.popular(p.getValue());
-                    for (int i = 0; i < Math.min(TOP, top.size()); i++) items.add(fromTmdb(top.get(i), pkg, Item.APP, i + 1));
+                found.add(services.submit(() -> fromService(tmdb, pkg, p.getValue(), today, local, published.containsKey(pkg))));
+            }
+            for (Future<List<Item>> f : found) {
+                try {
+                    items.addAll(f.get());
+                } catch (Exception e) {
+                    error.append("TMDB: ").append(e.getClass().getSimpleName()).append(". ");
                 }
             }
+            services.shutdown();
         } else {
             error.append("No TMDB token: the header has no new releases. ");
         }
@@ -210,6 +209,48 @@ final class Refresher {
         }
         Images.prune(ctx, keep);
         return new Store.Snapshot(now, error.toString().trim(), items, probe);
+    }
+
+    /** One service's TMDB rows: new releases and seasons for the header, its genre pool, and a top 10 if it publishes none. */
+    private static List<Item> fromService(Tmdb tmdb, String pkg, int provider, LocalDate today, List<Item> local,
+            boolean publishes) {
+        List<Item> out = new ArrayList<>();
+        // Premieres in the window, and series whose new season premiered in it; never a weekly episode of an old one.
+        List<Tmdb.Title> fresh = tmdb.newReleases(provider, today);
+        for (Tmdb.Title t : tmdb.newSeasons(provider, today)) {
+            boolean dup = false;
+            for (Tmdb.Title f : fresh) dup |= f.id == t.id && f.kind.equals(t.kind);
+            if (!dup) fresh.add(t);
+        }
+        for (Tmdb.Title t : fresh) {
+            if (Pick.recentEnough(t.released, t.season, today)) out.add(fromTmdb(t, pkg, Item.HERO, 0));
+        }
+        for (Tmdb.Title t : tmdb.genrePool(provider, POOL_PER_GENRE)) {
+            if (!hasTitle(local, pkg, t.name) && !hasTitle(out, pkg, t.name)) out.add(fromTmdb(t, pkg, Item.POOL, 0));
+        }
+        if (!publishes) {
+            List<Tmdb.Title> top = tmdb.popular(provider);
+            for (int i = 0; i < Math.min(TOP, top.size()); i++) out.add(fromTmdb(top.get(i), pkg, Item.APP, i + 1));
+        }
+        return out;
+    }
+
+    /**
+     * Stores this refresh's Continue watching and app rows with the last refresh's TMDB rows, and tells Home, before the
+     * slow part. The time stays the last full refresh's, so a refresh cut short is run again.
+     */
+    private static void showEarly(Context ctx, List<Item> local, Set<String> publishing, Map<String, int[]> probe) {
+        Store.Snapshot last = Store.get(ctx);
+        if (last.items.isEmpty()) return;
+        List<Item> early = new ArrayList<>(local);
+        for (Item i : last.items) {
+            boolean tmdb = Item.HERO.equals(i.section) || Item.POOL.equals(i.section)
+                    || (Item.APP.equals(i.section) && !publishing.contains(i.tab));
+            if (tmdb) early.add(i);
+        }
+        for (Item i : local) i.poster = Images.cache(ctx, i.posterSource, false);
+        Store.put(ctx, new Store.Snapshot(last.refreshedMs, last.error, early, probe));
+        ctx.getContentResolver().notifyChange(FeedProvider.itemsUri(), null);
     }
 
     /** The header candidates ranked per app (best IMDb rating, then most popular), {@value #HERO_PER_APP} each. */
