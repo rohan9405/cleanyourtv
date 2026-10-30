@@ -69,6 +69,10 @@ public final class FeedProvider extends ContentProvider {
                     i.intent, i.pkg, i.hero ? 1 : 0, i.section, i.tab, i.overview, i.kind, i.year, i.genre, i.plainArt ? 1 : 0, i.engaged, i.released});
         }
         c.setNotificationUri(getContext().getContentResolver(), itemsUri());
+        // When these rows were made: Home draws the header's picks from it, a new draw for each refresh.
+        android.os.Bundle extras = new android.os.Bundle();
+        extras.putLong("refreshed", s.refreshedMs);
+        c.setExtras(extras);
         return c;
     }
 

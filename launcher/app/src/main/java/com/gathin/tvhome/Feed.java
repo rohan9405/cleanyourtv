@@ -117,6 +117,7 @@ final class Feed {
     private Map<String, List<Entry>> tabs = Collections.emptyMap();
     private Map<String, List<Entry>> hero = Collections.emptyMap();
     private Map<String, List<Entry>> pool = Collections.emptyMap();
+    private long refreshed;
 
     private Feed(Context ctx, String authority, Handler main, Runnable onChange) {
         this.ctx = ctx;
@@ -235,6 +236,11 @@ final class Feed {
         return pool;
     }
 
+    /** When the add-on made these rows (0: unknown): the header's draw changes with it. */
+    long refreshed() {
+        return refreshed;
+    }
+
     /** package -> its header candidates, best first. */
     Map<String, List<Entry>> heroCandidates() {
         return hero;
@@ -244,7 +250,9 @@ final class Feed {
         try {
             io.execute(() -> {
                 List<Entry> entries = new ArrayList<>();
+                long made;
                 try (Cursor c = ctx.getContentResolver().query(uri, COLUMNS, null, drawer, null)) {
+                    made = c == null ? 0 : c.getExtras().getLong("refreshed");
                     // By name: the add-on may answer with its columns in its own order, or with more of them.
                     while (c != null && c.moveToNext()) {
                         entries.add(new Entry(s(c, "section"), s(c, "tab"), i(c, "row_order"), s(c, "title"),
@@ -269,6 +277,7 @@ final class Feed {
                     tabs = byTab;
                     hero = byHero;
                     pool = byPool;
+                    refreshed = made;
                     onChange.run();
                 });
             });
@@ -308,7 +317,32 @@ final class Feed {
      * The header's rotation: up to {@code perApp} of the best from each drawer app (YouTube left out), taken in turn
      * so the apps alternate, then topped up to {@code total} with the best-rated of what is left from those apps.
      */
-    static List<Entry> pickHero(Map<String, List<Entry>> candidates, List<String> drawer, int perApp, int total) {
+    /**
+     * One app's header: its {@code best} best titles, then titles drawn at random from the rest of its recent releases
+     * up to {@code count}, the draw fixed by {@code seed} (the refresh). A title it lists twice shows once.
+     */
+    static List<Entry> pickApp(List<Entry> ranked, int count, int best, long seed) {
+        List<Entry> own = new ArrayList<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (Entry e : ranked) if (seen.add(e.title.toLowerCase(java.util.Locale.ROOT))) own.add(e);
+        int keep = Math.min(Math.min(best, count), own.size());
+        List<Entry> out = new ArrayList<>(own.subList(0, keep));
+        List<Entry> others = new ArrayList<>(own.subList(keep, own.size()));
+        Collections.shuffle(others, new java.util.Random(seed));
+        out.addAll(others.subList(0, Math.min(count - keep, others.size())));
+        return out;
+    }
+
+    /** Each app's best titles, always in the header; the rest of its perApp are drawn from its other recent releases. */
+    static final int HERO_BEST = 2;
+
+    /**
+     * The header: perApp titles from each drawer app in turn (not YouTube), then the best of the rest up to total. An
+     * app's {@value #HERO_BEST} best always show; its other places go to titles drawn at random from the rest of its
+     * recent releases, the draw fixed by {@code seed} (the refresh), so each refresh shows a different mix and Home
+     * redrawing in between does not.
+     */
+    static List<Entry> pickHero(Map<String, List<Entry>> candidates, List<String> drawer, int perApp, int total, long seed) {
         List<List<Entry>> firsts = new ArrayList<>();
         List<Entry> rest = new ArrayList<>();
         // A title on two services (The Awakening, on Prime Video and JioHotstar) is shown once: the first drawer app's.
@@ -319,8 +353,14 @@ final class Feed {
             if (l == null || l.isEmpty()) continue;
             List<Entry> own = new ArrayList<>();
             for (Entry e : l) if (seen.add(e.title.toLowerCase(java.util.Locale.ROOT))) own.add(e);
-            firsts.add(own.subList(0, Math.min(perApp, own.size())));
-            rest.addAll(own.subList(Math.min(perApp, own.size()), own.size()));
+            int best = Math.min(Math.min(HERO_BEST, perApp), own.size());
+            List<Entry> others = new ArrayList<>(own.subList(best, own.size()));
+            Collections.shuffle(others, new java.util.Random(seed ^ pkg.hashCode()));
+            List<Entry> mine = new ArrayList<>(own.subList(0, best));
+            int drawn = Math.min(perApp - best, others.size());
+            mine.addAll(others.subList(0, drawn));
+            firsts.add(mine);
+            rest.addAll(others.subList(drawn, others.size()));
         }
         List<Entry> out = new ArrayList<>();
         for (int i = 0; out.size() < total; i++) {

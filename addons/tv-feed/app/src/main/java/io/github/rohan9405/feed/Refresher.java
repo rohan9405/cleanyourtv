@@ -36,8 +36,8 @@ final class Refresher {
     static final long STALE_MS = 20L * 60 * 1000;
     private static final int MAX_CONTINUE = 20;
     static final int TOP = 10;
-    /** Header candidates kept per app, ranked: Home uses 5 and dips into the rest to fill 20. */
-    private static final int HERO_PER_APP = 10;
+    /** Header candidates kept per app, ranked: Home shows 5, its best 2 and 3 drawn from the rest each refresh. */
+    private static final int HERO_PER_APP = 25;
     private static final int RATING_BUDGET = 200;
     /** Titles per service and genre in the genre pool. */
     private static final int POOL_PER_GENRE = 4;
@@ -236,6 +236,9 @@ final class Refresher {
             if (i.genre.isEmpty()) i.genre = e.genre;
             if (i.kind.isEmpty()) i.kind = "series".equals(e.type) ? "tv" : "movie".equals(e.type) ? "movie" : "";
         }
+        Map<String, Integer> heroCount = new LinkedHashMap<>();
+        for (Item i : items) if (Item.HERO.equals(i.section)) heroCount.merge(i.tab, 1, Integer::sum);
+        android.util.Log.i("Feed", "header candidates " + heroCount);
         items = keepHeroTop(items);
         ExecutorService pool = Executors.newFixedThreadPool(4);
         List<Future<?>> jobs = new ArrayList<>();

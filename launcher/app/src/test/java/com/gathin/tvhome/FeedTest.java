@@ -93,7 +93,7 @@ public class FeedTest {
         c.put("apple", ranked("apple", 8));
         c.put("notInDrawer", ranked("notInDrawer", 5));
         c.put(Feed.YOUTUBE, ranked(Feed.YOUTUBE, 5));
-        List<Feed.Entry> out = Feed.pickHero(c, Arrays.asList("netflix", Feed.YOUTUBE, "prime", "apple"), 5, 20);
+        List<Feed.Entry> out = Feed.pickHero(c, Arrays.asList("netflix", Feed.YOUTUBE, "prime", "apple"), 5, 20, 42);
         // 5 + 2 + 5 in turn, then the 5 + 3 left over from netflix and apple: 20 asked, 20 available.
         assertEquals(20, out.size());
         assertEquals("netflix0", out.get(0).title);
@@ -103,8 +103,41 @@ public class FeedTest {
             assertFalse(x.tab.equals(Feed.YOUTUBE));
             assertFalse(x.tab.equals("notInDrawer"));
         }
-        // The top-up comes best-rated first: netflix5 and apple5 are both 8.5, ahead of netflix6 (8.4).
-        assertEquals(8.5, out.get(12).ratingValue(), 0.001);
+        assertEquals("netflix1", out.get(3).title);   // each app's best two always show
+        assertEquals("apple1", out.get(5).title);
+        // The top-up comes best-rated first.
+        for (int i = 13; i < out.size(); i++) assertTrue(out.get(i - 1).ratingValue() >= out.get(i).ratingValue());
+    }
+
+    @Test
+    public void heroDrawChangesWithTheRefreshOnly() {
+        Map<String, List<Feed.Entry>> c = new java.util.LinkedHashMap<>();
+        c.put("netflix", ranked("netflix", 25));
+        List<String> drawer = Arrays.asList("netflix");
+        List<Feed.Entry> a = Feed.pickHero(c, drawer, 5, 5, 1000), again = Feed.pickHero(c, drawer, 5, 5, 1000);
+        assertEquals(titles(a), titles(again));   // Home redrawing: the same five
+        boolean changed = false;
+        for (long seed = 1001; seed < 1010 && !changed; seed++) changed = !titles(Feed.pickHero(c, drawer, 5, 5, seed)).equals(titles(a));
+        assertTrue(changed);   // a new refresh: a new mix
+        assertEquals("netflix0", a.get(0).title);
+        assertEquals("netflix1", a.get(1).title);
+    }
+
+    @Test
+    public void oneAppHeaderIsItsBestFiveThenTenDrawn() {
+        List<Feed.Entry> netflix = ranked("netflix", 30);
+        List<Feed.Entry> out = Feed.pickApp(netflix, 15, 5, 7);
+        assertEquals(15, out.size());
+        for (int i = 0; i < 5; i++) assertEquals("netflix" + i, out.get(i).title);
+        for (Feed.Entry e : out) assertEquals("netflix", e.tab);
+        assertEquals(titles(out), titles(Feed.pickApp(netflix, 15, 5, 7)));
+        assertEquals(2, Feed.pickApp(ranked("apple", 2), 15, 5, 7).size());   // fewer than 15: all it has
+    }
+
+    private static List<String> titles(List<Feed.Entry> l) {
+        List<String> out = new ArrayList<>();
+        for (Feed.Entry e : l) out.add(e.title);
+        return out;
     }
 
     @Test
@@ -112,7 +145,7 @@ public class FeedTest {
         Map<String, List<Feed.Entry>> c = new java.util.LinkedHashMap<>();
         c.put("prime", Arrays.asList(e(Feed.HERO, "prime", 1, "The Awakening", "7.0")));
         c.put("hotstar", Arrays.asList(e(Feed.HERO, "hotstar", 1, "The Awakening", "7.0"), e(Feed.HERO, "hotstar", 2, "The Mob", "6.0")));
-        List<Feed.Entry> out = Feed.pickHero(c, Arrays.asList("prime", "hotstar"), 5, 20);
+        List<Feed.Entry> out = Feed.pickHero(c, Arrays.asList("prime", "hotstar"), 5, 20, 0);
         assertEquals(2, out.size());
         assertEquals("prime", out.get(0).tab);
         assertEquals("The Mob", out.get(1).title);
@@ -126,6 +159,6 @@ public class FeedTest {
         c.put("c", ranked("c", 10));
         c.put("d", ranked("d", 10));
         c.put("e", ranked("e", 10));
-        assertEquals(20, Feed.pickHero(c, Arrays.asList("a", "b", "c", "d", "e"), 5, 20).size());
+        assertEquals(20, Feed.pickHero(c, Arrays.asList("a", "b", "c", "d", "e"), 5, 20, 0).size());
     }
 }
