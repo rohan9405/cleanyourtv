@@ -9,6 +9,7 @@ import android.media.tv.TvContract;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -39,6 +40,9 @@ final class Refresher {
     /** Header candidates kept per app, ranked: Home shows 5, its best 2 and 3 drawn from the rest each refresh. */
     private static final int HERO_PER_APP = 25;
     private static final int RATING_BUDGET = 200;
+    static final String YOUTUBE = "com.google.android.youtube.tv";
+    /** YouTube's videos kept for the header, in YouTube's own order, across all its rows. */
+    private static final int YOUTUBE_HERO = 40;
     /** Titles per service and genre in the genre pool. */
     private static final int POOL_PER_GENRE = 4;
 
@@ -161,21 +165,47 @@ final class Refresher {
 
         // Each app's own recommendations, the first ten it publishes across its channels.
         Set<Long> previewChannels = new HashSet<>();
+        Map<Long, String> rowNames = new HashMap<>();
+        Map<String, List<String>> rowsByApp = new LinkedHashMap<>();
         try (Cursor c = cr.query(TvContract.Channels.CONTENT_URI, null, null, null, null)) {
             while (c != null && c.moveToNext()) {
                 if (!TvContract.Channels.TYPE_PREVIEW.equals(str(c, TvContract.Channels.COLUMN_TYPE))) continue;
                 count(probe, str(c, TvContract.Channels.COLUMN_PACKAGE_NAME), 2);
                 previewChannels.add(lng(c, TvContract.Channels._ID));
+                rowNames.put(lng(c, TvContract.Channels._ID), str(c, TvContract.Channels.COLUMN_DISPLAY_NAME));
+                rowsByApp.computeIfAbsent(str(c, TvContract.Channels.COLUMN_PACKAGE_NAME), k -> new ArrayList<>())
+                        .add(str(c, TvContract.Channels.COLUMN_DISPLAY_NAME));
             }
         } catch (RuntimeException e) {
             error.append("Channels: ").append(e.getClass().getSimpleName()).append(". ");
         }
+        for (Map.Entry<String, List<String>> e : rowsByApp.entrySet()) {
+            android.util.Log.i("Feed", "rows " + e.getKey() + " (" + e.getValue().size() + "): " + new java.util.LinkedHashSet<>(e.getValue()));
+        }
         Map<String, List<Item>> published = new LinkedHashMap<>();
+        List<Item> youTubeHero = new ArrayList<>();
+        Map<String, Integer> youTubeRows = new LinkedHashMap<>();
         try (Cursor c = cr.query(TvContract.PreviewPrograms.CONTENT_URI, null, null, null, null)) {
             while (c != null && c.moveToNext()) {
                 String pkg = str(c, TvContract.PreviewPrograms.COLUMN_PACKAGE_NAME);
                 count(probe, pkg, 1);
                 if (Providers.browser(pkg) || pkg.isEmpty()) continue;
+                // YouTube's videos are the header's when YouTube is focused: every row's, not just the first ten.
+                if (YOUTUBE.equals(pkg) && youTubeHero.size() < YOUTUBE_HERO) {
+                    Item v = program(c, pkg);
+                    if (v != null && !has(youTubeHero, v.title)) {
+                        String author = str(c, TvContract.PreviewPrograms.COLUMN_AUTHOR);
+                        String row = rowNames.get(lng(c, TvContract.PreviewPrograms.COLUMN_CHANNEL_ID));
+                        v.section = Item.HERO;
+                        v.tab = pkg;
+                        v.subtitle = !author.isEmpty() ? author : row == null ? "" : row;
+                        v.subtitleRow = row == null ? "" : row;
+                        v.rowOrder = youTubeRank(row);
+                        // New videos only: "Recommended for you" is mostly years-old music videos.
+                        if (v.rowOrder < Integer.MAX_VALUE && Pick.newVideo(v.overview)) youTubeHero.add(v);
+                        youTubeRows.merge(row == null ? "?" : row, 1, Integer::sum);
+                    }
+                }
                 List<Item> list = published.get(pkg);
                 if (list == null) published.put(pkg, list = new ArrayList<>());
                 if (list.size() >= TOP) continue;
@@ -190,6 +220,8 @@ final class Refresher {
             error.append("Preview: ").append(e.getClass().getSimpleName()).append(". ");
         }
         for (List<Item> l : published.values()) items.addAll(l);
+        if (!youTubeHero.isEmpty()) android.util.Log.i("Feed", "YouTube rows " + youTubeRows);
+        if (wanted(ctx, YOUTUBE)) items.addAll(youTubeFeed(youTubeHero));
 
         // What is on the TV itself is ready now: show it with the last refresh's TMDB rows while those are fetched.
         showEarly(ctx, items, published.keySet(), probe);
@@ -266,6 +298,40 @@ final class Refresher {
         return new Store.Snapshot(now, error.toString().trim(), items, probe);
     }
 
+    /**
+     * YouTube's rows by how much they are your feed: new uploads from your subscriptions and your recommendations
+     * first, then what is trending; music videos are left out. Unknown rows (YouTube renaming one) go last.
+     */
+    static int youTubeRank(String row) {
+        String r = row == null ? "" : row.toLowerCase(java.util.Locale.ROOT);
+        if (r.contains("music")) return Integer.MAX_VALUE;
+        if (r.contains("subscription") || r.contains("recommended")) return 0;
+        if (r.contains("trending")) return 1;
+        return 2;
+    }
+
+    /** The feed rows' videos taken in turn (a subscription, a recommendation, ...), then trending, then the rest. */
+    static List<Item> youTubeFeed(List<Item> videos) {
+        Map<String, List<Item>> byRow = new LinkedHashMap<>();
+        for (Item v : videos) {
+            List<Item> l = byRow.get(v.rowOrder + "|" + v.subtitleRow);
+            if (l == null) byRow.put(v.rowOrder + "|" + v.subtitleRow, l = new ArrayList<>());
+            l.add(v);
+        }
+        List<Item> out = new ArrayList<>();
+        for (int rank = 0; rank <= 2; rank++) {
+            List<List<Item>> rows = new ArrayList<>();
+            for (Map.Entry<String, List<Item>> e : byRow.entrySet()) if (e.getKey().startsWith(rank + "|")) rows.add(e.getValue());
+            for (int i = 0; ; i++) {
+                boolean any = false;
+                for (List<Item> l : rows) if (i < l.size()) { out.add(l.get(i)); any = true; }
+                if (!any) break;
+            }
+        }
+        for (int i = 0; i < out.size(); i++) out.get(i).rowOrder = i + 1;
+        return out;
+    }
+
     /** One service's TMDB rows: new releases and seasons for the header, its genre pool, and a top 10 if it publishes none. */
     private static List<Item> fromService(Tmdb tmdb, String pkg, int provider, LocalDate today, List<Item> local,
             boolean publishes) {
@@ -322,8 +388,10 @@ final class Refresher {
             l.add(i);
         }
         for (List<Item> l : hero.values()) {
-            List<Item> ranked = Pick.rankHero(l, LocalDate.now().getYear());
-            for (int i = 0; i < Math.min(HERO_PER_APP, ranked.size()); i++) {
+            // YouTube's order is its own recommendation (and its videos have no rating): kept as it is.
+            List<Item> ranked = YOUTUBE.equals(l.get(0).tab) ? l : Pick.rankHero(l, LocalDate.now().getYear());
+            int keep = YOUTUBE.equals(l.get(0).tab) ? YOUTUBE_HERO : HERO_PER_APP;
+            for (int i = 0; i < Math.min(keep, ranked.size()); i++) {
                 ranked.get(i).rowOrder = i + 1;
                 out.add(ranked.get(i));
             }

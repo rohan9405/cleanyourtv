@@ -67,4 +67,16 @@ public class PickTest {
         assertEquals(Arrays.asList("a1", "b1", "c1", "a2", "c2"), Pick.interleave(lists, 10));
         assertEquals(Arrays.asList("a1", "b1", "c1"), Pick.interleave(lists, 3));
     }
+
+    @Test
+    public void newVideosAreAWeekOldAtMost() {
+        org.junit.Assert.assertTrue(Pick.newVideo("The Daily Show • 43 minutes ago"));
+        org.junit.Assert.assertTrue(Pick.newVideo("CNBC-TV18 • Streamed 10 minutes ago"));
+        org.junit.Assert.assertTrue(Pick.newVideo("Marvel Entertainment • 5 days ago"));
+        org.junit.Assert.assertTrue(Pick.newVideo("NDTV Profit"));   // live now: no age
+        org.junit.Assert.assertTrue(Pick.newVideo("Some Channel • 1 week ago"));
+        org.junit.Assert.assertFalse(Pick.newVideo("Some Channel • 2 weeks ago"));
+        org.junit.Assert.assertFalse(Pick.newVideo("Adnan Dhool Official  • 11 years ago"));
+        org.junit.Assert.assertFalse(Pick.newVideo("T-Series • 3 months ago"));
+    }
 }
