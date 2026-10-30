@@ -475,10 +475,12 @@ final class FeedHome {
         List<String> want = saved == null ? defaultDrawer : Arrays.asList(TextUtils.split(saved, ","));
         drawer = new ArrayList<>();
         for (String p : want) if (apps.containsKey(p) && !drawer.contains(p)) drawer.add(p);
+        feed.setDrawer(drawer);
     }
 
     private void saveDrawer() {
         prefs.edit().putString(DRAWER, TextUtils.join(",", drawer)).apply();
+        feed.setDrawer(drawer);
     }
 
     /** Every drawer app on one line: tiles up to 176 dp wide, smaller when more apps have to fit. */

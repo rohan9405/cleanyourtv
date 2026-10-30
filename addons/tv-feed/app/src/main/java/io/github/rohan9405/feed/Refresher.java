@@ -44,6 +44,9 @@ final class Refresher {
 
     private static final ExecutorService ONE = Executors.newSingleThreadExecutor();
     private static final AtomicBoolean RUNNING = new AtomicBoolean();
+    /** Asked for while a refresh was running (an app joined the drawer): run once more when it ends. */
+    private static final AtomicBoolean AGAIN = new AtomicBoolean();
+    private static final String DRAWER_PREFS = "drawer", DRAWER = "apps";
 
     private Refresher() {
     }
@@ -61,8 +64,33 @@ final class Refresher {
             } finally {
                 RUNNING.set(false);
                 if (onDone != null) onDone.run();
+                if (AGAIN.getAndSet(false)) kick(app, null);
             }
         });
+    }
+
+    /** A refresh now, or straight after the one running, which started before the drawer changed. */
+    static void kickSoon(Context ctx) {
+        if (RUNNING.get()) AGAIN.set(true);
+        kick(ctx, null);
+    }
+
+    /** Stores Home's drawer apps; true when one TMDB knows about has just joined, so it has no rows yet. */
+    static synchronized boolean setDrawer(Context ctx, String[] apps) {
+        android.content.SharedPreferences prefs = ctx.getSharedPreferences(DRAWER_PREFS, Context.MODE_PRIVATE);
+        Set<String> old = prefs.getStringSet(DRAWER, null);
+        Set<String> now = new HashSet<>(java.util.Arrays.asList(apps));
+        if (now.equals(old)) return false;
+        prefs.edit().putStringSet(DRAWER, now).apply();
+        if (old == null) return false;   // the first time Home says: the rows already there came from every app
+        for (String pkg : now) if (!old.contains(pkg) && Providers.TMDB.containsKey(pkg)) return true;
+        return false;
+    }
+
+    /** The apps whose TMDB rows are wanted: the drawer's, or every one before Home has said. */
+    static boolean wanted(Context ctx, String pkg) {
+        Set<String> drawer = ctx.getSharedPreferences(DRAWER_PREFS, Context.MODE_PRIVATE).getStringSet(DRAWER, null);
+        return drawer == null || drawer.contains(pkg);
     }
 
     static boolean running() {
@@ -151,7 +179,8 @@ final class Refresher {
         showEarly(ctx, items, published.keySet(), probe);
 
         // TMDB: the header's new releases for every service installed here, and a top 10 for the ones that publish none.
-        // One thread per service: each asks TMDB dozens of things, and one at a time that took minutes.
+        // Only the drawer's apps: Home shows TMDB rows for no other. One thread per service: each asks TMDB dozens of
+        // things, and one at a time that took minutes.
         Tmdb tmdb = new Tmdb(ctx);
         if (tmdb.usable()) {
             LocalDate today = LocalDate.now();
@@ -160,9 +189,10 @@ final class Refresher {
             List<Future<List<Item>>> found = new ArrayList<>();
             for (Map.Entry<String, Integer> p : Providers.TMDB.entrySet()) {
                 String pkg = p.getKey();
-                if (!installed(pm, pkg)) continue;
+                if (!installed(pm, pkg) || !wanted(ctx, pkg)) continue;
                 found.add(services.submit(() -> fromService(tmdb, pkg, p.getValue(), today, local, published.containsKey(pkg))));
             }
+            android.util.Log.i("Feed", "TMDB for " + found.size() + " drawer apps");
             for (Future<List<Item>> f : found) {
                 try {
                     items.addAll(f.get());
@@ -246,7 +276,7 @@ final class Refresher {
         for (Item i : last.items) {
             boolean tmdb = Item.HERO.equals(i.section) || Item.POOL.equals(i.section)
                     || (Item.APP.equals(i.section) && !publishing.contains(i.tab));
-            if (tmdb) early.add(i);
+            if (tmdb && wanted(ctx, i.tab)) early.add(i);
         }
         for (Item i : local) i.poster = Images.cache(ctx, i.posterSource, false);
         Store.put(ctx, new Store.Snapshot(last.refreshedMs, last.error, early, probe));
